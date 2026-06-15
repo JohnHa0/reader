@@ -108,7 +108,44 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
     };
     setupShortcut();
 
+    // LOCAL SHORTCUT FALLBACK
+    const handleLocalKeyDown = (e: KeyboardEvent) => {
+      const checkMatch = (shortcut: string) => {
+        if (!shortcut) return false;
+        const parts = shortcut.split('+');
+        const key = parts[parts.length - 1]?.toUpperCase();
+        const needsAlt = parts.includes('Alt');
+        const needsCtrl = parts.includes('CommandOrControl') || parts.includes('CmdOrCtrl');
+        const needsShift = parts.includes('Shift');
+        const needsSuper = parts.includes('Super');
+
+        const pressedKey = e.key === ' ' ? 'SPACE' : e.key.toUpperCase();
+
+        return (
+          pressedKey === key &&
+          (needsAlt ? e.altKey : !e.altKey) &&
+          (needsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
+          (needsShift ? e.shiftKey : !e.shiftKey) &&
+          (needsSuper ? e.metaKey : !e.metaKey) // approximate meta
+        );
+      };
+
+      if (checkMatch(bossKey)) {
+        e.preventDefault();
+        toggleGhost();
+      } else if (checkMatch(topKey)) {
+        e.preventDefault();
+        toggleTop();
+      } else if (checkMatch(throughKey)) {
+        e.preventDefault();
+        toggleThrough();
+      }
+    };
+
+    window.addEventListener('keydown', handleLocalKeyDown);
+
     return () => {
+      window.removeEventListener('keydown', handleLocalKeyDown);
       if (bossKey) unregister(bossKey).catch(() => {});
       if (topKey) unregister(topKey).catch(() => {});
       if (throughKey) unregister(throughKey).catch(() => {});

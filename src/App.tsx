@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useGhostMode } from "./hooks/useGhostMode";
 import { useReader } from "./hooks/useReader";
 import { useSettings } from "./hooks/useSettings";
@@ -203,6 +204,11 @@ function App() {
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
+        onPointerDown={(e) => {
+          if (e.button === 0 && e.target === scrollRef.current) {
+            getCurrentWindow().startDragging();
+          }
+        }}
         onKeyDown={(e) => {
           if (!scrollRef.current) return;
           const container = scrollRef.current;
@@ -225,7 +231,6 @@ function App() {
         }}
         tabIndex={0}
         className="flex-1 w-full h-full overflow-y-auto p-4 cursor-default whitespace-pre-wrap break-words outline-none"
-        data-tauri-drag-region
         style={{
           fontSize: `${settings.fontSize}px`,
           fontFamily: settings.fontFamily,
