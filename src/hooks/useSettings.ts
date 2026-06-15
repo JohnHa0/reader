@@ -16,6 +16,7 @@ export interface AppSettings {
   menuKey: string;
   idleTimeoutMinutes: number;
   menuVisible: boolean;
+  hideTrayInGhost: boolean;
 }
 
 const defaultSettings: AppSettings = {
@@ -34,6 +35,7 @@ const defaultSettings: AppSettings = {
   menuKey: "Alt+M",
   idleTimeoutMinutes: 3,
   menuVisible: true,
+  hideTrayInGhost: false,
 };
 
 export function useSettings() {

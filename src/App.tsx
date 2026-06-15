@@ -4,9 +4,23 @@ import { useReader } from "./hooks/useReader";
 import { useSettings } from "./hooks/useSettings";
 import "./App.css";
 
+import { ShortcutInput } from "./components/ShortcutInput";
+
+const PRESET_FONTS = [
+  { label: "系统默认", value: "system-ui, sans-serif" },
+  { label: "微软雅黑", value: "'Microsoft YaHei', sans-serif" },
+  { label: "黑体", value: "SimHei, sans-serif" },
+  { label: "宋体", value: "SimSun, serif" },
+  { label: "楷体", value: "KaiTi, serif" },
+  { label: "仿宋", value: "FangSong, serif" },
+  { label: "苹方", value: "'PingFang SC', sans-serif" },
+  { label: "思源黑体", value: "'Noto Sans SC', sans-serif" },
+  { label: "Arial", value: "Arial, sans-serif" },
+];
+
 function App() {
   const { settings, updateSettings } = useSettings();
-  const { isGhost, isTop, isThrough, toggleGhost, toggleTop, toggleThrough } = useGhostMode(settings.bossKey, settings.topKey, settings.throughKey, settings.idleTimeoutMinutes);
+  const { isGhost, isTop, isThrough, toggleGhost, toggleTop, toggleThrough } = useGhostMode(settings.bossKey, settings.topKey, settings.throughKey, settings.idleTimeoutMinutes, settings.hideTrayInGhost);
   const { content, filePath, openFileDialog, saveProgress, loadProgress } = useReader();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -45,8 +59,19 @@ function App() {
   // Handle menu toggle shortcut
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Very basic parsing for Alt+M
-      if (e.altKey && e.key.toLowerCase() === settings.menuKey.split("+")[1]?.toLowerCase()) {
+      // Split the saved menuKey like "Alt+M" into modifier and key
+      const parts = settings.menuKey.split("+");
+      const keyStr = parts[parts.length - 1]?.toLowerCase();
+      const needsAlt = parts.includes("Alt");
+      const needsCtrl = parts.includes("CommandOrControl");
+      const needsShift = parts.includes("Shift");
+
+      if (
+        (needsAlt ? e.altKey : !e.altKey) &&
+        (needsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
+        (needsShift ? e.shiftKey : !e.shiftKey) &&
+        e.key.toLowerCase() === keyStr
+      ) {
         updateSettings({ menuVisible: !settings.menuVisible });
       }
     };
@@ -80,8 +105,16 @@ function App() {
               打开本地小说
             </button>
             <label className="flex flex-col">
-              字体家族
-              <input type="text" value={settings.fontFamily} onChange={e => updateSettings({fontFamily: e.target.value})} className="border rounded px-2 py-1 mt-1" placeholder="例如: Microsoft YaHei" />
+              字体选择
+              <select 
+                value={settings.fontFamily} 
+                onChange={e => updateSettings({fontFamily: e.target.value})} 
+                className="border rounded px-2 py-1 mt-1 bg-white"
+              >
+                {PRESET_FONTS.map(f => (
+                  <option key={f.label} value={f.value}>{f.label}</option>
+                ))}
+              </select>
             </label>
             <label className="flex flex-col">
               字体大小 ({settings.fontSize}px)
@@ -92,11 +125,19 @@ function App() {
               <input type="range" min="1" max="3" step="0.1" value={settings.lineHeight} onChange={e => updateSettings({lineHeight: Number(e.target.value)})} className="mt-1" />
             </label>
             
-            <label className="flex items-center justify-between border rounded p-1 bg-white">
-              文字颜色 <input type="color" value={settings.fontColor} onChange={e => updateSettings({fontColor: e.target.value})} className="w-8 h-8 p-0 border-0" />
+            <label className="flex flex-col justify-between border rounded p-1 bg-white">
+              <span className="text-xs text-gray-500">文字颜色 (可直接拾取或输入Hex)</span>
+              <div className="flex items-center gap-2 mt-1">
+                <input type="color" value={settings.fontColor} onChange={e => updateSettings({fontColor: e.target.value})} className="w-8 h-8 p-0 border-0 flex-shrink-0" />
+                <input type="text" value={settings.fontColor} onChange={e => updateSettings({fontColor: e.target.value})} className="w-full text-xs outline-none" />
+              </div>
             </label>
-            <label className="flex items-center justify-between border rounded p-1 bg-white">
-              背景颜色 <input type="color" value={settings.bgColor} onChange={e => updateSettings({bgColor: e.target.value})} className="w-8 h-8 p-0 border-0" />
+            <label className="flex flex-col justify-between border rounded p-1 bg-white">
+              <span className="text-xs text-gray-500">背景颜色 (可直接拾取或输入Hex)</span>
+              <div className="flex items-center gap-2 mt-1">
+                <input type="color" value={settings.bgColor} onChange={e => updateSettings({bgColor: e.target.value})} className="w-8 h-8 p-0 border-0 flex-shrink-0" />
+                <input type="text" value={settings.bgColor} onChange={e => updateSettings({bgColor: e.target.value})} className="w-full text-xs outline-none" />
+              </div>
             </label>
             <label className="flex flex-col">
               透明度 ({(settings.bgOpacity * 100).toFixed(0)}%)
@@ -110,12 +151,31 @@ function App() {
 
           <div className="h-px w-full bg-gray-300 my-1"></div>
 
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-            <label className="flex flex-col text-xs text-gray-600">老板键快捷键 <input type="text" value={settings.bossKey} onChange={e => updateSettings({bossKey: e.target.value})} className="border rounded px-1 mt-1" /></label>
-            <label className="flex flex-col text-xs text-gray-600">置顶快捷键 <input type="text" value={settings.topKey} onChange={e => updateSettings({topKey: e.target.value})} className="border rounded px-1 mt-1" /></label>
-            <label className="flex flex-col text-xs text-gray-600">穿透快捷键 <input type="text" value={settings.throughKey} onChange={e => updateSettings({throughKey: e.target.value})} className="border rounded px-1 mt-1" /></label>
-            <label className="flex flex-col text-xs text-gray-600">菜单呼出快捷键 <input type="text" value={settings.menuKey} onChange={e => updateSettings({menuKey: e.target.value})} className="border rounded px-1 mt-1" /></label>
-            <label className="flex flex-col text-xs text-gray-600">空闲隐藏(分钟) <input type="number" value={settings.idleTimeoutMinutes} onChange={e => updateSettings({idleTimeoutMinutes: Number(e.target.value)})} className="border rounded px-1 mt-1" /></label>
+          <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+            <div className="flex flex-col text-xs text-gray-600">
+              老板键 (隐身)
+              <ShortcutInput value={settings.bossKey} onChange={val => updateSettings({bossKey: val})} />
+            </div>
+            <div className="flex flex-col text-xs text-gray-600">
+              置顶切换快捷键
+              <ShortcutInput value={settings.topKey} onChange={val => updateSettings({topKey: val})} />
+            </div>
+            <div className="flex flex-col text-xs text-gray-600">
+              鼠标穿透快捷键
+              <ShortcutInput value={settings.throughKey} onChange={val => updateSettings({throughKey: val})} />
+            </div>
+            <div className="flex flex-col text-xs text-gray-600">
+              菜单呼出快捷键
+              <ShortcutInput value={settings.menuKey} onChange={val => updateSettings({menuKey: val})} />
+            </div>
+            <label className="flex flex-col text-xs text-gray-600">
+              空闲隐藏(分钟，0为关闭) 
+              <input type="number" min="0" value={settings.idleTimeoutMinutes} onChange={e => updateSettings({idleTimeoutMinutes: Number(e.target.value)})} className="border rounded px-1 mt-1 bg-white h-7" />
+            </label>
+            <label className="flex items-center gap-1 text-xs text-gray-600 mt-4 cursor-pointer">
+              <input type="checkbox" checked={settings.hideTrayInGhost} onChange={e => updateSettings({hideTrayInGhost: e.target.checked})} className="w-4 h-4" />
+              隐身时彻底隐藏托盘
+            </label>
           </div>
 
           <div className="h-px w-full bg-gray-300 my-1"></div>
@@ -133,7 +193,7 @@ function App() {
             )}
             <div className="flex-1"></div>
             <div className="text-gray-500 text-xs">
-              状态: {isTop ? "已置顶" : "未置顶"} | 穿透后请按快捷键恢复
+              状态: {isTop ? "已置顶" : "未置顶"} | 穿透后请按快捷键恢复 | Linux 下全局快捷键若失效，请取消隐藏托盘。
             </div>
           </div>
         </div>

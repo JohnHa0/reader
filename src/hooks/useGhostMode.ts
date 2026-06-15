@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { TrayIcon } from "@tauri-apps/api/tray";
 
-export function useGhostMode(bossKey: string, topKey: string, throughKey: string, idleTimeoutMinutes: number) {
+export function useGhostMode(bossKey: string, topKey: string, throughKey: string, idleTimeoutMinutes: number, hideTrayInGhost: boolean) {
   const [isGhost, setIsGhost] = useState(false);
   const [isTop, setIsTop] = useState(false);
   const [isThrough, setIsThrough] = useState(false);
@@ -15,6 +15,13 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
         // Create tray with default options
         const tray = await TrayIcon.new({ id: 'moyu-tray', tooltip: 'Moyu Reader' });
         trayRef.current = tray;
+        
+        // Add tray click event to restore window if it was hidden
+        tray.onAction((event) => {
+          if (event.type === 'Click') {
+            toggleGhost();
+          }
+        });
       }
     } catch (e) {
       console.error("Failed to init tray:", e);
@@ -31,22 +38,24 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
   const toggleGhost = useCallback(async () => {
     try {
       const win = getCurrentWindow();
+      // If we are currently ghosted (hidden), we need to show
       if (isGhost) {
-        // Show
         await win.show();
         await win.setFocus();
         if (trayRef.current) await trayRef.current.setVisible(true);
         setIsGhost(false);
       } else {
-        // Hide
+        // We are visible, so hide
         await win.hide();
-        if (trayRef.current) await trayRef.current.setVisible(false);
+        if (trayRef.current && hideTrayInGhost) {
+          await trayRef.current.setVisible(false);
+        }
         setIsGhost(true);
       }
     } catch (e) {
       console.error("Failed to toggle ghost mode:", e);
     }
-  }, [isGhost]);
+  }, [isGhost, hideTrayInGhost]);
 
   const toggleTop = useCallback(async () => {
     try {
