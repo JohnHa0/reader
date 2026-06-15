@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { listen, UnlistenFn } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { TrayIcon } from "@tauri-apps/api/tray";
 
 export function useGhostMode(bossKey: string, topKey: string, throughKey: string, idleTimeoutMinutes: number, hideTrayInGhost: boolean) {
@@ -12,16 +12,16 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
   const initTray = async () => {
     try {
       if (!trayRef.current) {
-        // Create tray with default options
-        const tray = await TrayIcon.new({ id: 'moyu-tray', tooltip: 'Moyu Reader' });
-        trayRef.current = tray;
-        
-        // Add tray click event to restore window if it was hidden
-        tray.onAction((event) => {
-          if (event.type === 'Click') {
-            toggleGhost();
+        const tray = await TrayIcon.new({ 
+          id: 'moyu-tray', 
+          tooltip: 'Moyu Reader',
+          action: (event) => {
+            if (event.type === 'Click') {
+              toggleGhost();
+            }
           }
         });
+        trayRef.current = tray;
       }
     } catch (e) {
       console.error("Failed to init tray:", e);
@@ -80,11 +80,9 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
   }, [isThrough]);
 
   useEffect(() => {
-    let unlisten: UnlistenFn | null = null;
-
     const setupGlobalListener = async () => {
       try {
-        unlisten = await listen<string>('global-keypress', (event) => {
+        await listen<string>('global-keypress', (event) => {
           const shortcut = event.payload;
           if (!shortcut) return;
           const s = shortcut.toUpperCase();
@@ -142,9 +140,6 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
 
     return () => {
       window.removeEventListener('keydown', handleLocalKeyDown);
-      if (bossKey) unregister(bossKey).catch(() => {});
-      if (topKey) unregister(topKey).catch(() => {});
-      if (throughKey) unregister(throughKey).catch(() => {});
     };
   }, [toggleGhost, toggleTop, toggleThrough, bossKey, topKey, throughKey]);
 

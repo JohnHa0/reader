@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useGhostMode } from "./hooks/useGhostMode";
 import { useReader } from "./hooks/useReader";
@@ -21,7 +21,7 @@ const PRESET_FONTS = [
 
 function App() {
   const { settings, updateSettings } = useSettings();
-  const { isGhost, isTop, isThrough, toggleGhost, toggleTop, toggleThrough } = useGhostMode(settings.bossKey, settings.topKey, settings.throughKey, settings.idleTimeoutMinutes, settings.hideTrayInGhost);
+  const { isGhost, isTop, isThrough } = useGhostMode(settings.bossKey, settings.topKey, settings.throughKey, settings.idleTimeoutMinutes, settings.hideTrayInGhost);
   const { content, filePath, openFileDialog, saveProgress, loadProgress } = useReader();
 
   const scrollRef = useRef<HTMLDivElement>(null);
