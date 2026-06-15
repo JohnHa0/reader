@@ -84,12 +84,22 @@ function App() {
 
   return (
     <div 
-      className="w-screen h-screen overflow-hidden flex flex-col select-none"
+      className="w-screen h-screen overflow-hidden flex flex-col select-none relative"
       style={{
         backgroundColor: `${settings.bgColor}${Math.round(settings.bgOpacity * 255).toString(16).padStart(2, '0')}`,
         pointerEvents: isThrough ? 'none' : 'auto',
       }}
     >
+      {/* Edge Drag Regions */}
+      {!isThrough && (
+        <>
+          <div className="absolute top-0 left-0 w-full h-3 z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div className="absolute bottom-0 left-0 w-full h-3 z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div className="absolute top-0 left-0 w-3 h-full z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div className="absolute top-0 right-0 w-3 h-full z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+        </>
+      )}
+
       {/* Settings Menu */}
       {!isThrough && settings.menuVisible && (
         <div 
@@ -204,11 +214,6 @@ function App() {
       <div 
         ref={scrollRef}
         onScroll={handleScroll}
-        onPointerDown={(e) => {
-          if (e.button === 0 && e.target === scrollRef.current) {
-            getCurrentWindow().startDragging();
-          }
-        }}
         onKeyDown={(e) => {
           if (!scrollRef.current) return;
           const container = scrollRef.current;

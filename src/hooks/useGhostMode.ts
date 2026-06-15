@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
+import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { TrayIcon } from "@tauri-apps/api/tray";
 
 export function useGhostMode(bossKey: string, topKey: string, throughKey: string, idleTimeoutMinutes: number, hideTrayInGhost: boolean) {
@@ -80,33 +80,29 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
   }, [isThrough]);
 
   useEffect(() => {
-    // Register shortcuts
-    const setupShortcut = async () => {
+    let unlisten: UnlistenFn | null = null;
+
+    const setupGlobalListener = async () => {
       try {
-        await unregister(bossKey).catch(() => {});
-        await unregister(topKey).catch(() => {});
-        await unregister(throughKey).catch(() => {});
-        
-        if (bossKey) {
-          await register(bossKey, (event) => {
-            if (event.state === "Pressed") toggleGhost();
-          });
-        }
-        if (topKey) {
-          await register(topKey, (event) => {
-            if (event.state === "Pressed") toggleTop();
-          });
-        }
-        if (throughKey) {
-          await register(throughKey, (event) => {
-            if (event.state === "Pressed") toggleThrough();
-          });
-        }
+        unlisten = await listen<string>('global-keypress', (event) => {
+          const shortcut = event.payload;
+          if (!shortcut) return;
+          const s = shortcut.toUpperCase();
+
+          if (bossKey && s === bossKey.toUpperCase()) {
+             toggleGhost();
+          } else if (topKey && s === topKey.toUpperCase()) {
+             toggleTop();
+          } else if (throughKey && s === throughKey.toUpperCase()) {
+             toggleThrough();
+          }
+        });
       } catch (e) {
-        console.error("Failed to register shortcut:", e);
+        console.error("Failed to listen to global keypress", e);
       }
     };
-    setupShortcut();
+    
+    setupGlobalListener();
 
     // LOCAL SHORTCUT FALLBACK
     const handleLocalKeyDown = (e: KeyboardEvent) => {
