@@ -3,7 +3,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { register, unregister } from "@tauri-apps/plugin-global-shortcut";
 import { TrayIcon } from "@tauri-apps/api/tray";
 
-export function useGhostMode() {
+export function useGhostMode(bossKey: string, topKey: string, throughKey: string, idleTimeoutMinutes: number) {
   const [isGhost, setIsGhost] = useState(false);
   const [isTop, setIsTop] = useState(false);
   const [isThrough, setIsThrough] = useState(false);
@@ -74,19 +74,25 @@ export function useGhostMode() {
     // Register shortcuts
     const setupShortcut = async () => {
       try {
-        await unregister("Alt+H");
-        await unregister("Alt+T");
-        await unregister("Alt+P");
+        await unregister(bossKey).catch(() => {});
+        await unregister(topKey).catch(() => {});
+        await unregister(throughKey).catch(() => {});
         
-        await register("Alt+H", (event) => {
-          if (event.state === "Pressed") toggleGhost();
-        });
-        await register("Alt+T", (event) => {
-          if (event.state === "Pressed") toggleTop();
-        });
-        await register("Alt+P", (event) => {
-          if (event.state === "Pressed") toggleThrough();
-        });
+        if (bossKey) {
+          await register(bossKey, (event) => {
+            if (event.state === "Pressed") toggleGhost();
+          });
+        }
+        if (topKey) {
+          await register(topKey, (event) => {
+            if (event.state === "Pressed") toggleTop();
+          });
+        }
+        if (throughKey) {
+          await register(throughKey, (event) => {
+            if (event.state === "Pressed") toggleThrough();
+          });
+        }
       } catch (e) {
         console.error("Failed to register shortcut:", e);
       }
@@ -94,21 +100,21 @@ export function useGhostMode() {
     setupShortcut();
 
     return () => {
-      unregister("Alt+H").catch(console.error);
-      unregister("Alt+T").catch(console.error);
-      unregister("Alt+P").catch(console.error);
+      if (bossKey) unregister(bossKey).catch(() => {});
+      if (topKey) unregister(topKey).catch(() => {});
+      if (throughKey) unregister(throughKey).catch(() => {});
     };
-  }, [toggleGhost, toggleTop, toggleThrough]);
+  }, [toggleGhost, toggleTop, toggleThrough, bossKey, topKey, throughKey]);
 
   // Idle timeout feature (Anti-Gank)
   useEffect(() => {
     let timeout: number;
     const resetTimer = () => {
       clearTimeout(timeout);
-      if (!isGhost) {
+      if (!isGhost && idleTimeoutMinutes > 0) {
         timeout = window.setTimeout(() => {
           toggleGhost();
-        }, 3 * 60 * 1000); // 3 minutes default
+        }, idleTimeoutMinutes * 60 * 1000);
       }
     };
 
@@ -121,7 +127,7 @@ export function useGhostMode() {
       window.removeEventListener("mousemove", resetTimer);
       window.removeEventListener("keydown", resetTimer);
     };
-  }, [isGhost, toggleGhost]);
+  }, [isGhost, toggleGhost, idleTimeoutMinutes]);
 
   return { isGhost, isTop, isThrough, toggleGhost, toggleTop, toggleThrough };
 }

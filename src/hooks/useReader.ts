@@ -3,6 +3,8 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { open } from "@tauri-apps/plugin-dialog";
 import jschardet from "jschardet";
 
+import ePub from "epubjs";
+
 export interface ReaderConfig {
   compactMode: boolean;
   fontSize: number;
@@ -12,7 +14,7 @@ export interface ReaderConfig {
 }
 
 export function useReader() {
-  const [content, setContent] = useState<string>("拖拽 txt 文件到此处开始摸鱼...\n您可以按住任意文字区域拖动窗口。\n\n按 Alt+H 隐藏/显示\n按 Alt+T 置顶/取消置顶\n按 Alt+P 鼠标穿透/取消");
+  const [content, setContent] = useState<string>("拖拽 txt/epub 文件到此处开始摸鱼...\n您可以按住任意文字区域拖动窗口。\n\n按 Alt+H 隐藏/显示\n按 Alt+T 置顶/取消置顶\n按 Alt+P 鼠标穿透/取消");
   const [filePath, setFilePath] = useState<string | null>(null);
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   
@@ -22,9 +24,6 @@ export function useReader() {
     if (compact) {
       // Remove multiple empty lines
       text = text.replace(/\n\s*\n/g, '\n');
-      // Replace single line breaks with spaces to merge paragraphs, 
-      // but keep double line breaks (which became single above) 
-      // This is basic, might need tuning for Chinese novels
       text = text.replace(/([^\n])\n([^\n])/g, '$1$2');
     }
     return text;
@@ -33,18 +32,29 @@ export function useReader() {
   const loadFile = useCallback(async (path: string, compact: boolean) => {
     try {
       const fileData = await readFile(path);
+      let extractedText = "";
+
+      if (path.toLowerCase().endsWith(".epub")) {
+        // Parse EPUB
+        const book = ePub(fileData.buffer);
+        const spine: any = await book.loaded.spine;
+        for (let item of spine.spineItems) {
+          const doc = await item.load(book.load.bind(book));
+          if (doc && doc.body) {
+             extractedText += doc.body.textContent + "\n\n";
+          }
+        }
+      } else {
+        // Parse TXT
+        const sampleStr = String.fromCharCode.apply(null, Array.from(fileData.slice(0, 4096)));
+        const detected = jschardet.detect(sampleStr);
+        const encoding = detected.encoding || "utf-8";
+        
+        const decoder = new TextDecoder(encoding.toLowerCase().includes("gb") ? "gbk" : "utf-8", { fatal: false });
+        extractedText = decoder.decode(fileData);
+      }
       
-      // Detect encoding
-      // We convert a small chunk to string for detection to avoid memory issues
-      const sampleStr = String.fromCharCode.apply(null, Array.from(fileData.slice(0, 4096)));
-      const detected = jschardet.detect(sampleStr);
-      const encoding = detected.encoding || "utf-8";
-      
-      // Decode
-      const decoder = new TextDecoder(encoding.toLowerCase().includes("gb") ? "gbk" : "utf-8", { fatal: false });
-      const decodedText = decoder.decode(fileData);
-      
-      setContent(cleanText(decodedText, compact));
+      setContent(cleanText(extractedText, compact));
       setFilePath(path);
       
       // Save to history

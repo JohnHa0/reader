@@ -11,12 +11,16 @@ export interface AppSettings {
   autoScroll: boolean;
   autoScrollSpeed: number; // pixels per frame
   bossKey: string;
+  topKey: string;
+  throughKey: string;
+  menuKey: string;
   idleTimeoutMinutes: number;
+  menuVisible: boolean;
 }
 
 const defaultSettings: AppSettings = {
   fontSize: 14,
-  fontFamily: "sans-serif",
+  fontFamily: "system-ui, sans-serif",
   fontColor: "#333333",
   bgColor: "#ffffff",
   bgOpacity: 0.8,
@@ -25,7 +29,11 @@ const defaultSettings: AppSettings = {
   autoScroll: false,
   autoScrollSpeed: 0.5,
   bossKey: "Alt+H",
+  topKey: "Alt+T",
+  throughKey: "Alt+P",
+  menuKey: "Alt+M",
   idleTimeoutMinutes: 3,
+  menuVisible: true,
 };
 
 export function useSettings() {
