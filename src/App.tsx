@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { useGhostMode } from "./hooks/useGhostMode";
 import { useReader } from "./hooks/useReader";
@@ -21,7 +21,14 @@ const PRESET_FONTS = [
 
 function App() {
   const { settings, updateSettings } = useSettings();
-  const { isGhost, isTop, isThrough } = useGhostMode(settings.bossKey, settings.topKey, settings.throughKey, settings.idleTimeoutMinutes, settings.hideTrayInGhost);
+  const toggleMenu = useCallback(() => {
+    updateSettings({ menuVisible: !settings.menuVisible });
+  }, [settings.menuVisible, updateSettings]);
+  const { isGhost, isTop, isThrough } = useGhostMode(
+    settings.bossKey, settings.topKey, settings.throughKey,
+    settings.menuKey, settings.idleTimeoutMinutes, settings.hideTrayInGhost,
+    toggleMenu
+  );
   const { content, filePath, openFileDialog, saveProgress, loadProgress } = useReader();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -57,10 +64,9 @@ function App() {
     return () => cancelAnimationFrame(animationId);
   }, [settings.autoScroll, settings.autoScrollSpeed, isGhost]);
 
-  // Handle menu toggle shortcut
+  // Handle menu toggle shortcut - local fallback for when global shortcut isn't captured (e.g. Wayland)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Split the saved menuKey like "Alt+M" into modifier and key
       const parts = settings.menuKey.split("+");
       const keyStr = parts[parts.length - 1]?.toLowerCase();
       const needsAlt = parts.includes("Alt");
@@ -73,12 +79,14 @@ function App() {
         (needsShift ? e.shiftKey : !e.shiftKey) &&
         e.key.toLowerCase() === keyStr
       ) {
-        updateSettings({ menuVisible: !settings.menuVisible });
+        // Local fallback only triggers when window has focus (global handled by Rust)
+        e.preventDefault();
+        toggleMenu();
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.menuKey, settings.menuVisible, updateSettings]);
+  }, [settings.menuKey, toggleMenu]);
 
   if (isGhost) return null;
 
@@ -90,13 +98,13 @@ function App() {
         pointerEvents: isThrough ? 'none' : 'auto',
       }}
     >
-      {/* Edge Drag Regions */}
+      {/* Drag Regions: use both data-tauri-drag-region (macOS) + startDragging (Linux/fallback) */}
       {!isThrough && (
         <>
-          <div className="absolute top-0 left-0 w-full h-3 z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
-          <div className="absolute bottom-0 left-0 w-full h-3 z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
-          <div className="absolute top-0 left-0 w-3 h-full z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
-          <div className="absolute top-0 right-0 w-3 h-full z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div data-tauri-drag-region className="absolute bottom-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 left-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 right-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if(e.button === 0) getCurrentWindow().startDragging(); }} />
         </>
       )}
 
@@ -106,12 +114,8 @@ function App() {
           className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300"
         >
           <div 
-            className="flex justify-between items-center cursor-move" 
-            onPointerDown={(e) => { 
-              if(e.button === 0 && (e.target as HTMLElement).tagName !== 'BUTTON') {
-                getCurrentWindow().startDragging(); 
-              }
-            }}
+            data-tauri-drag-region
+            className="flex justify-between items-center cursor-move"
           >
             <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader 控制中心</h2>
             <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer">✕</button>
@@ -218,6 +222,7 @@ function App() {
 
       {/* Reader Content Area */}
       <div 
+        data-tauri-drag-region
         ref={scrollRef}
         onScroll={handleScroll}
         onKeyDown={(e) => {
@@ -241,7 +246,7 @@ function App() {
           }
         }}
         tabIndex={0}
-        className="flex-1 w-full h-full overflow-y-auto p-4 cursor-default whitespace-pre-wrap break-words outline-none"
+        className="flex-1 w-full h-full overflow-y-auto p-4 cursor-move whitespace-pre-wrap break-words outline-none"
         style={{
           fontSize: `${settings.fontSize}px`,
           fontFamily: settings.fontFamily,

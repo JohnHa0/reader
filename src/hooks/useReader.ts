@@ -3,7 +3,8 @@ import { readFile } from "@tauri-apps/plugin-fs";
 import { open } from "@tauri-apps/plugin-dialog";
 import jschardet from "jschardet";
 
-import ePub from "epubjs";
+import { invoke } from "@tauri-apps/api/core";
+// import ePub from "epubjs"; // No longer needed
 
 export interface ReaderConfig {
   compactMode: boolean;
@@ -31,21 +32,14 @@ export function useReader() {
 
   const loadFile = useCallback(async (path: string, compact: boolean) => {
     try {
-      const fileData = await readFile(path);
       let extractedText = "";
 
       if (path.toLowerCase().endsWith(".epub")) {
-        // Parse EPUB
-        const book = ePub(fileData.buffer);
-        const spine: any = await book.loaded.spine;
-        for (let item of spine.spineItems) {
-          const doc = await item.load(book.load.bind(book));
-          if (doc && doc.body) {
-             extractedText += doc.body.textContent + "\n\n";
-          }
-        }
+        // Parse EPUB using Rust backend
+        extractedText = await invoke<string>("parse_epub", { path });
       } else {
         // Parse TXT
+        const fileData = await readFile(path);
         const sampleStr = String.fromCharCode.apply(null, Array.from(fileData.slice(0, 4096)));
         const detected = jschardet.detect(sampleStr);
         const encoding = detected.encoding || "utf-8";

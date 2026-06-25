@@ -2,22 +2,39 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { TrayIcon } from "@tauri-apps/api/tray";
+import { invoke } from "@tauri-apps/api/core";
 
-export function useGhostMode(bossKey: string, topKey: string, throughKey: string, idleTimeoutMinutes: number, hideTrayInGhost: boolean) {
+export function useGhostMode(bossKey: string, topKey: string, throughKey: string, menuKey: string, idleTimeoutMinutes: number, hideTrayInGhost: boolean, onMenuToggle: () => void) {
   const [isGhost, setIsGhost] = useState(false);
   const [isTop, setIsTop] = useState(false);
   const [isThrough, setIsThrough] = useState(false);
   const trayRef = useRef<TrayIcon | null>(null);
+  const isGhostRef = useRef(false);
+  const hideTrayRef = useRef(hideTrayInGhost);
 
-  const initTray = async () => {
+  // Keep refs in sync for use inside callbacks that don't re-register
+  useEffect(() => { isGhostRef.current = isGhost; }, [isGhost]);
+  useEffect(() => { hideTrayRef.current = hideTrayInGhost; }, [hideTrayInGhost]);
+
+  const initTray = useCallback(async () => {
     try {
       if (!trayRef.current) {
         const tray = await TrayIcon.new({ 
           id: 'moyu-tray', 
           tooltip: 'Moyu Reader',
-          action: (event) => {
-            if (event.type === 'Click') {
-              toggleGhost();
+          action: () => {
+            // Use ref so the callback always has latest state
+            const win = getCurrentWindow();
+            if (isGhostRef.current) {
+              win.show().then(() => win.setFocus());
+              trayRef.current?.setVisible(true);
+              setIsGhost(false);
+            } else {
+              win.hide();
+              if (hideTrayRef.current) {
+                trayRef.current?.setVisible(false);
+              }
+              setIsGhost(true);
             }
           }
         });
@@ -26,26 +43,24 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
     } catch (e) {
       console.error("Failed to init tray:", e);
     }
-  };
+  }, []);
 
   useEffect(() => {
     initTray();
     return () => {
       trayRef.current?.close();
     };
-  }, []);
+  }, [initTray]);
 
   const toggleGhost = useCallback(async () => {
     try {
       const win = getCurrentWindow();
-      // If we are currently ghosted (hidden), we need to show
       if (isGhost) {
         await win.show();
         await win.setFocus();
         if (trayRef.current) await trayRef.current.setVisible(true);
         setIsGhost(false);
       } else {
-        // We are visible, so hide
         await win.hide();
         if (trayRef.current && hideTrayInGhost) {
           await trayRef.current.setVisible(false);
@@ -79,69 +94,28 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
     }
   }, [isThrough]);
 
+  // Register global shortcuts via Rust backend (uses tauri-plugin-global-shortcut, works on macOS + Linux X11)
   useEffect(() => {
-    const setupGlobalListener = async () => {
-      try {
-        await listen<string>('global-keypress', (event) => {
-          const shortcut = event.payload;
-          if (!shortcut) return;
-          const s = shortcut.toUpperCase();
+    invoke("register_shortcuts", {
+      bossKey: bossKey || "",
+      topKey: topKey || "",
+      throughKey: throughKey || "",
+      menuKey: menuKey || "",
+    }).catch((e) => console.error("Failed to register shortcuts:", e));
+  }, [bossKey, topKey, throughKey, menuKey]);
 
-          if (bossKey && s === bossKey.toUpperCase()) {
-             toggleGhost();
-          } else if (topKey && s === topKey.toUpperCase()) {
-             toggleTop();
-          } else if (throughKey && s === throughKey.toUpperCase()) {
-             toggleThrough();
-          }
-        });
-      } catch (e) {
-        console.error("Failed to listen to global keypress", e);
-      }
-    };
-    
-    setupGlobalListener();
+  // Listen to shortcut events emitted by the Rust backend
+  useEffect(() => {
+    const unlisten = listen<string>('global-keypress', (event) => {
+      const name = event.payload;
+      if (name === "boss") toggleGhost();
+      else if (name === "top") toggleTop();
+      else if (name === "through") toggleThrough();
+      else if (name === "menu") onMenuToggle();
+    });
 
-    // LOCAL SHORTCUT FALLBACK
-    const handleLocalKeyDown = (e: KeyboardEvent) => {
-      const checkMatch = (shortcut: string) => {
-        if (!shortcut) return false;
-        const parts = shortcut.split('+');
-        const key = parts[parts.length - 1]?.toUpperCase();
-        const needsAlt = parts.includes('Alt');
-        const needsCtrl = parts.includes('CommandOrControl') || parts.includes('CmdOrCtrl');
-        const needsShift = parts.includes('Shift');
-        const needsSuper = parts.includes('Super');
-
-        const pressedKey = e.key === ' ' ? 'SPACE' : e.key.toUpperCase();
-
-        return (
-          pressedKey === key &&
-          (needsAlt ? e.altKey : !e.altKey) &&
-          (needsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
-          (needsShift ? e.shiftKey : !e.shiftKey) &&
-          (needsSuper ? e.metaKey : !e.metaKey) // approximate meta
-        );
-      };
-
-      if (checkMatch(bossKey)) {
-        e.preventDefault();
-        toggleGhost();
-      } else if (checkMatch(topKey)) {
-        e.preventDefault();
-        toggleTop();
-      } else if (checkMatch(throughKey)) {
-        e.preventDefault();
-        toggleThrough();
-      }
-    };
-
-    window.addEventListener('keydown', handleLocalKeyDown);
-
-    return () => {
-      window.removeEventListener('keydown', handleLocalKeyDown);
-    };
-  }, [toggleGhost, toggleTop, toggleThrough, bossKey, topKey, throughKey]);
+    return () => { unlisten.then(fn => fn()); };
+  }, [toggleGhost, toggleTop, toggleThrough, onMenuToggle]);
 
   // Idle timeout feature (Anti-Gank)
   useEffect(() => {
