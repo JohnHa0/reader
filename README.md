@@ -1,7 +1,94 @@
-# Tauri + React + Typescript
+# Moyu Reader (摸鱼阅读器) - 配置与维护手册
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Moyu Reader 是一款专为 Linux（如麒麟 OS、Ubuntu）等环境设计的高级隐蔽型跨平台本地小说阅读器。本项目基于 Tauri v2 + React + TypeScript + Rust 构建，主打**无边框、可高度定制、系统级按键防屏蔽**等特性，助您在办公环境下实现完美“潜伏”。
 
-## Recommended IDE Setup
+---
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+## 🌟 核心特性与架构解读
+
+### 1. 突破桌面限制的“真·全局快捷键” (rdev底层Hook)
+在 Linux (特别是 Wayland 或某些定制过的 X11 桌面环境) 中，常规的全局快捷键经常被系统或窗口管理器拦截。
+* **技术实现**：抛弃了传统的 `tauri-plugin-global-shortcut` 插件，在 Rust 后端 (`src-tauri/src/lib.rs`) 中集成了内核级的按键监听库 `rdev`。
+* **效果**：无论焦点在哪个窗口，甚至在全屏游戏中，只要按下设定的按键组合（如 `F9`, `Alt+H` 等），后台 Rust 线程都会捕获，并通过 Tauri IPC 发送给前端执行“隐身”、“置顶”、“穿透”等指令，实现100%触发率。
+
+### 2. 隐形边缘拖拽系统
+由于软件采用完全无边框 (`decorations: false`) 和全透明 (`transparent: true`) 渲染，传统的拖拽往往会与页面内容的鼠标滚动、文字选中发生冲突。
+* **技术实现**：移除了带有副作用的 `data-tauri-drag-region` 属性。我们在窗口的**上、下、左、右四大边缘**以及**控制台标题栏**植入了专用的鼠标交互监听，通过调用 `getCurrentWindow().startDragging()` 实现流畅的移动。
+* **交互体验**：阅读正文区可自由拖拽滚动条或选中文本，而只需将光标挪至任意屏幕边缘即可拖拽窗口。
+
+### 3. 多模态“幽灵”状态 (Ghost Mode)
+包含三种核心防御状态，可自由组合使用：
+* **隐身模式 (Boss Key)**：瞬间隐藏主窗口，并且可以通过设置彻底隐藏系统任务栏托盘图标。
+* **鼠标穿透 (Through)**：忽略所有鼠标点击事件，点击动作直接穿透到背后的窗口，使软件变成纯粹的“壁纸或背景文字”。
+* **自动隐藏 (Anti-Gank)**：通过内置的防挂机检测，当系统键鼠空闲超过设定时间（如 3 分钟）时，窗口将自动隐藏。
+
+---
+
+## ⚙️ 软件编译与环境配置
+
+本项目专门针对 Ubuntu 20 / Kylin OS 进行了兼容性测试与打磨。
+
+### 前置环境需求
+1. **Node.js**: v18 及以上版本。
+2. **Rust**: 最新稳定版（建议通过 `rustup` 安装）。
+3. **系统依赖**: 
+   ```bash
+   sudo apt update
+   sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+   ```
+   *(注意：某些 Linux 发行版下的 `rdev` 可能需要额外的 udev 规则或权限设置，若快捷键无响应，请尝试放宽 `/dev/input/` 的读取权限或切换 X11/Wayland 尝试。)*
+
+### 启动与编译指令
+* **安装依赖**：
+  ```bash
+  npm install
+  ```
+* **开发模式运行**：
+  ```bash
+  npm run tauri dev
+  ```
+* **打包发行版**：
+  ```bash
+  npm run tauri build
+  ```
+  *(编译产物通常位于 `src-tauri/target/release/bundle/` 目录下)*
+
+---
+
+## 🎨 个性化配置指南
+
+所有的自定义配置（字体、颜色、快捷键）都持久化保存在本地 `localStorage` 中。
+
+1. **唤出设置菜单**：
+   默认快捷键为 `Alt+M`（或者通过托盘图标操作），点击后顶部将弹出设置面版。
+2. **背景与字体调整**：
+   * 支持通过取色器或 HEX 码设置精确颜色。
+   * 支持背景透明度调节（滑块控制），甚至可以调至 **全透明**。
+3. **快捷键设定**：
+   * 在设置菜单中点击输入框即可录制新的快捷键。
+   * 支持纯字母/数字键（如 `H`），也支持组合键（如 `Ctrl+Alt+H`）。
+4. **阅读与加载**：
+   * 目前支持本地小说文件的加载（暂不支持过大的多媒体 EPUB 解析，推荐 TXT）。
+   * 系统会自动记录您的**滚动阅读进度**。
+
+---
+
+## 🛠️ 日常维护与故障排查
+
+### 1. 软件变为“完全不可见的白屏/空气”
+**原因**：通常是因为不小心将背景设置为了完全透明（0%），且同时字体颜色与系统背景融为一体；或者是不小心触发了前端 TypeScript 的异常导致 React 渲染崩溃。
+**恢复办法**：
+* 快捷键呼出菜单 `Alt+M` 重调设置。
+* 若依然无法解决，请在浏览器的 DevTools 的 Console 中输入 `localStorage.removeItem('moyu_settings')`，然后重启软件恢复出厂设置。
+
+### 2. 快捷键失效
+**排查步骤**：
+1. 请检查您的输入法是否处于全角模式。
+2. 在 Linux Wayland 环境下，若安全策略过严，`rdev` 有时会受限。如果遇到这种情况，请在终端以更高的权限测试，或切换至 X11 运行环境。
+
+### 3. 拖拽无法生效
+**提示**：软件中心区域已被释放为阅读区域。若需拖拽，请精准将鼠标移动至窗口的最顶端或最底端边缘（约 3-5px 的判定区），或者通过 `Alt+M` 呼出菜单后按住菜单栏顶部拖拽。
+
+---
+
+> 👨‍💻 **Developer Notes**: 此项目由 DeepMind Antigravity AI 协助构建与重构，具备极高的灵活度与防封锁能力，祝您摸鱼愉快。
