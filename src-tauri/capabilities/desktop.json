@@ -12,6 +12,7 @@
     "fs:default",
     "dialog:default",
     "os:default",
-    "store:default"
+    "store:default",
+    "core:window:default"
   ]
 }

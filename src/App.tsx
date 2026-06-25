@@ -104,11 +104,17 @@ function App() {
       {!isThrough && settings.menuVisible && (
         <div 
           className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300"
-          data-tauri-drag-region
         >
-          <div className="flex justify-between items-center" data-tauri-drag-region>
+          <div 
+            className="flex justify-between items-center cursor-move" 
+            onPointerDown={(e) => { 
+              if(e.button === 0 && (e.target as HTMLElement).tagName !== 'BUTTON') {
+                getCurrentWindow().startDragging(); 
+              }
+            }}
+          >
             <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader 控制中心</h2>
-            <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black">✕</button>
+            <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer">✕</button>
           </div>
           
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
