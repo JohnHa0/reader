@@ -32,6 +32,19 @@ const WINDOW_TITLE_PRESETS = [
   "Moyu Reader",
 ];
 
+// Check if a KeyboardEvent matches the key part of a shortcut string (e.g. "C", "M", "F5")
+// Uses e.code as primary check to handle Alt/Option key layout changes on macOS
+function matchesKey(e: KeyboardEvent, keyStr: string): boolean {
+  const k = keyStr.toLowerCase();
+  // e.code-based check (layout-independent): "KeyC" for "c", "Digit1" for "1", "F5" for "f5"
+  const code = e.code.toLowerCase();
+  if (code === `key${k}`) return true;
+  if (code === `digit${k}`) return true;
+  if (code === k) return true; // for F1-F12, Space, etc.
+  // fallback to e.key (works when no Alt modifier)
+  return e.key.toLowerCase() === k;
+}
+
 // Format relative time
 function formatRelativeTime(ts: number): string {
   const diff = Date.now() - ts;
@@ -174,13 +187,13 @@ function App() {
     const handleKeyDown = (e: KeyboardEvent) => {
       // TOC toggle shortcut (local only)
       const tocParts = settings.tocKey.split("+");
-      const tocKeyStr = tocParts[tocParts.length - 1]?.toLowerCase();
+      const tocKeyStr = tocParts[tocParts.length - 1] ?? "";
       const tocNeedsAlt = tocParts.includes("Alt");
       const tocNeedsCtrl = tocParts.includes("CommandOrControl") || tocParts.includes("Ctrl");
       if (
         (tocNeedsAlt ? e.altKey : !e.altKey) &&
         (tocNeedsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
-        e.key.toLowerCase() === tocKeyStr
+        matchesKey(e, tocKeyStr)
       ) {
         e.preventDefault();
         toggleToc();
@@ -189,7 +202,7 @@ function App() {
 
       // Menu toggle fallback
       const parts = settings.menuKey.split("+");
-      const keyStr = parts[parts.length - 1]?.toLowerCase();
+      const keyStr = parts[parts.length - 1] ?? "";
       const needsAlt = parts.includes("Alt");
       const needsCtrl = parts.includes("CommandOrControl");
       const needsShift = parts.includes("Shift");
@@ -197,7 +210,7 @@ function App() {
         (needsAlt ? e.altKey : !e.altKey) &&
         (needsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
         (needsShift ? e.shiftKey : !e.shiftKey) &&
-        e.key.toLowerCase() === keyStr
+        matchesKey(e, keyStr)
       ) {
         e.preventDefault();
         toggleMenu();
