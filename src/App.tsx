@@ -1,21 +1,26 @@
 import { useEffect, useRef, useState, useCallback } from "react";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/core";
 import { useGhostMode } from "./hooks/useGhostMode";
 import { useReader } from "./hooks/useReader";
 import { useSettings } from "./hooks/useSettings";
 import "./App.css";
 import { ShortcutInput } from "./components/ShortcutInput";
 
+// Built-in preset fonts (fallback / always available)
 const PRESET_FONTS = [
   { label: "系统默认", value: "system-ui, sans-serif" },
+  { label: "苹方", value: "'PingFang SC', sans-serif" },
   { label: "微软雅黑", value: "'Microsoft YaHei', sans-serif" },
   { label: "黑体", value: "SimHei, sans-serif" },
   { label: "宋体", value: "SimSun, serif" },
   { label: "楷体", value: "KaiTi, serif" },
   { label: "仿宋", value: "FangSong, serif" },
-  { label: "苹方", value: "'PingFang SC', sans-serif" },
   { label: "思源黑体", value: "'Noto Sans SC', sans-serif" },
+  { label: "思源宋体", value: "'Noto Serif SC', serif" },
   { label: "Arial", value: "Arial, sans-serif" },
+  { label: "Georgia", value: "Georgia, serif" },
+  { label: "Courier New", value: "'Courier New', monospace" },
 ];
 
 const WINDOW_TITLE_PRESETS = [
@@ -27,6 +32,19 @@ const WINDOW_TITLE_PRESETS = [
   "Moyu Reader",
 ];
 
+// Format relative time
+function formatRelativeTime(ts: number): string {
+  const diff = Date.now() - ts;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "刚刚";
+  if (mins < 60) return `${mins}分钟前`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}小时前`;
+  const days = Math.floor(hrs / 24);
+  if (days < 30) return `${days}天前`;
+  return new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
+}
+
 function App() {
   const { settings, updateSettings } = useSettings();
   const {
@@ -34,19 +52,29 @@ function App() {
     saveProgress, loadProgress,
     recentFiles, getFilePct,
     bookmarks, addBookmark, removeBookmark,
+    toc,
   } = useReader();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
   const [toast, setToast] = useState<string | null>(null);
-  const lastGKeyTime = useRef(0); // for "gg" detection
+  const lastGKeyTime = useRef(0);
   const toastTimer = useRef<number | null>(null);
+  const [systemFonts, setSystemFonts] = useState<string[]>([]);
+  const [tocVisible, setTocVisible] = useState(false);
 
-  // Show a toast notification for 1.5s
+  // Show toast notification for 1.5s
   const showToast = useCallback((msg: string) => {
     setToast(msg);
     if (toastTimer.current) clearTimeout(toastTimer.current);
     toastTimer.current = window.setTimeout(() => setToast(null), 1500);
+  }, []);
+
+  // Load system fonts on startup
+  useEffect(() => {
+    invoke<string[]>("list_system_fonts")
+      .then(fonts => setSystemFonts(fonts))
+      .catch(() => setSystemFonts([]));
   }, []);
 
   // Set window title from settings
@@ -111,10 +139,13 @@ function App() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [settings.fontSize, updateSettings, showToast]);
 
-  // Toggle menu
   const toggleMenu = useCallback(() => {
     updateSettings({ menuVisible: !settings.menuVisible });
   }, [settings.menuVisible, updateSettings]);
+
+  const toggleToc = useCallback(() => {
+    setTocVisible(v => !v);
+  }, []);
 
   // Add bookmark at current scroll position
   const onBookmark = useCallback(() => {
@@ -141,6 +172,22 @@ function App() {
   // Local menu key fallback (when window has focus / Wayland)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      // TOC toggle shortcut (local only)
+      const tocParts = settings.tocKey.split("+");
+      const tocKeyStr = tocParts[tocParts.length - 1]?.toLowerCase();
+      const tocNeedsAlt = tocParts.includes("Alt");
+      const tocNeedsCtrl = tocParts.includes("CommandOrControl") || tocParts.includes("Ctrl");
+      if (
+        (tocNeedsAlt ? e.altKey : !e.altKey) &&
+        (tocNeedsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
+        e.key.toLowerCase() === tocKeyStr
+      ) {
+        e.preventDefault();
+        toggleToc();
+        return;
+      }
+
+      // Menu toggle fallback
       const parts = settings.menuKey.split("+");
       const keyStr = parts[parts.length - 1]?.toLowerCase();
       const needsAlt = parts.includes("Alt");
@@ -158,21 +205,36 @@ function App() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.menuKey, toggleMenu]);
+  }, [settings.menuKey, settings.tocKey, toggleMenu, toggleToc]);
 
   if (isGhost) return null;
 
-  // Jump to bookmark
+  // Jump to position by scroll percentage
+  const jumpToScrollPct = (pct: number) => {
+    if (scrollRef.current) {
+      const { scrollHeight, clientHeight } = scrollRef.current;
+      scrollRef.current.scrollTop = ((pct / 100) * (scrollHeight - clientHeight));
+      setTocVisible(false);
+    }
+  };
+
   const jumpToBookmark = (pos: number) => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = pos;
     }
   };
 
-  // Full keyboard navigation handler
+  // Merge system fonts with presets (remove duplicates by value)
+  const systemFontOptions = systemFonts.map(f => ({ label: f, value: `'${f}', sans-serif` }));
+  const presetValues = new Set(PRESET_FONTS.map(f => f.label.toLowerCase()));
+  const uniqueSystemFonts = systemFontOptions.filter(
+    f => !presetValues.has(f.label.toLowerCase())
+  );
+  const allFonts = [...PRESET_FONTS, ...uniqueSystemFonts];
+
+  // Full keyboard navigation
   const handleKeyDown = (e: KeyboardEvent) => {
     if (!scrollRef.current) return;
-    // Don't intercept when menu is open and user is in a form field
     const tag = (e.target as HTMLElement).tagName;
     if (["INPUT", "SELECT", "TEXTAREA"].includes(tag)) return;
 
@@ -182,81 +244,42 @@ function App() {
     const now = Date.now();
 
     switch (e.key) {
-      case "ArrowDown":
-      case "j":
-        container.scrollTop += lineH;
-        e.preventDefault();
-        break;
-      case "ArrowUp":
-      case "k":
-        container.scrollTop -= lineH;
-        e.preventDefault();
-        break;
-      case "ArrowRight":
-      case "d":
-        container.scrollTop += pageH / 2;
-        e.preventDefault();
-        break;
-      case "ArrowLeft":
-      case "u":
-        container.scrollTop -= pageH / 2;
-        e.preventDefault();
-        break;
+      case "ArrowDown": case "j":
+        container.scrollTop += lineH; e.preventDefault(); break;
+      case "ArrowUp": case "k":
+        container.scrollTop -= lineH; e.preventDefault(); break;
+      case "ArrowRight": case "d":
+        container.scrollTop += pageH / 2; e.preventDefault(); break;
+      case "ArrowLeft": case "u":
+        container.scrollTop -= pageH / 2; e.preventDefault(); break;
       case "PageDown":
-        container.scrollTop += pageH;
-        e.preventDefault();
-        break;
+        container.scrollTop += pageH; e.preventDefault(); break;
       case "PageUp":
-        container.scrollTop -= pageH;
-        e.preventDefault();
-        break;
+        container.scrollTop -= pageH; e.preventDefault(); break;
       case " ":
         if (settings.autoScroll) {
-          updateSettings({ autoScroll: false });
-          showToast("⏸ 自动滚动已暂停");
-        } else {
-          container.scrollTop += pageH;
-        }
-        e.preventDefault();
-        break;
-      case "End":
-        container.scrollTop = container.scrollHeight;
-        e.preventDefault();
-        break;
-      case "Home":
-        container.scrollTop = 0;
-        e.preventDefault();
-        break;
+          updateSettings({ autoScroll: false }); showToast("⏸ 自动滚动已暂停");
+        } else { container.scrollTop += pageH; }
+        e.preventDefault(); break;
+      case "End": container.scrollTop = container.scrollHeight; e.preventDefault(); break;
+      case "Home": container.scrollTop = 0; e.preventDefault(); break;
       case "G":
-        if (e.shiftKey) {
-          container.scrollTop = container.scrollHeight;
-          e.preventDefault();
-        }
-        break;
+        if (e.shiftKey) { container.scrollTop = container.scrollHeight; e.preventDefault(); } break;
       case "g":
         if (now - lastGKeyTime.current < 400) {
-          // "gg" sequence — jump to top
-          container.scrollTop = 0;
-          lastGKeyTime.current = 0;
-          e.preventDefault();
-        } else {
-          lastGKeyTime.current = now;
-        }
+          container.scrollTop = 0; lastGKeyTime.current = 0; e.preventDefault();
+        } else { lastGKeyTime.current = now; }
         break;
       case "[":
         if (settings.autoScroll) {
-          const newSpeed = Math.max(0.1, Math.round((settings.autoScrollSpeed - 0.1) * 10) / 10);
-          updateSettings({ autoScrollSpeed: newSpeed });
-          showToast(`滚动速度: ${newSpeed.toFixed(1)}x`);
-        }
-        break;
+          const s = Math.max(0.1, Math.round((settings.autoScrollSpeed - 0.1) * 10) / 10);
+          updateSettings({ autoScrollSpeed: s }); showToast(`速度: ${s.toFixed(1)}x`);
+        } break;
       case "]":
         if (settings.autoScroll) {
-          const newSpeed = Math.min(5, Math.round((settings.autoScrollSpeed + 0.1) * 10) / 10);
-          updateSettings({ autoScrollSpeed: newSpeed });
-          showToast(`滚动速度: ${newSpeed.toFixed(1)}x`);
-        }
-        break;
+          const s = Math.min(5, Math.round((settings.autoScrollSpeed + 0.1) * 10) / 10);
+          updateSettings({ autoScrollSpeed: s }); showToast(`速度: ${s.toFixed(1)}x`);
+        } break;
     }
   };
 
@@ -268,7 +291,7 @@ function App() {
         pointerEvents: isThrough ? 'none' : 'auto',
       }}
     >
-      {/* Drag Regions — hidden when menu is open to prevent intercepting button clicks */}
+      {/* Drag Regions — hidden when menu is open */}
       {!isThrough && !settings.menuVisible && (
         <>
           <div data-tauri-drag-region className="absolute top-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }} />
@@ -280,21 +303,18 @@ function App() {
 
       {/* Toast Notification */}
       {toast && (
-        <div className="absolute top-8 left-1/2 z-[100] pointer-events-none"
-          style={{ transform: 'translateX(-50%)' }}>
-          <div className="bg-black bg-opacity-70 text-white text-xs px-3 py-1.5 rounded-full shadow-lg">
-            {toast}
-          </div>
+        <div className="absolute top-8 left-1/2 z-[100] pointer-events-none" style={{ transform: 'translateX(-50%)' }}>
+          <div className="bg-black bg-opacity-70 text-white text-xs px-3 py-1.5 rounded-full shadow-lg">{toast}</div>
         </div>
       )}
 
       {/* Settings Menu */}
       {!isThrough && settings.menuVisible && (
         <div className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300 max-h-[90vh] overflow-y-auto">
-          {/* Menu Header */}
+          {/* Header */}
           <div data-tauri-drag-region className="flex justify-between items-center cursor-move">
             <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader 控制中心</h2>
-            <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer">✕</button>
+            <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer text-lg leading-none px-1">✕</button>
           </div>
 
           {/* Row 1: File + Display */}
@@ -304,8 +324,24 @@ function App() {
             </button>
             <label className="flex flex-col">
               字体选择
-              <select value={settings.fontFamily} onChange={e => updateSettings({ fontFamily: e.target.value })} className="border rounded px-2 py-1 mt-1 bg-white">
-                {PRESET_FONTS.map(f => <option key={f.label} value={f.value}>{f.label}</option>)}
+              <select
+                value={settings.fontFamily}
+                onChange={e => updateSettings({ fontFamily: e.target.value })}
+                className="border rounded px-2 py-1 mt-1 bg-white"
+                style={{ fontFamily: settings.fontFamily }}
+              >
+                <optgroup label="预设字体">
+                  {PRESET_FONTS.map(f => (
+                    <option key={f.label} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>
+                  ))}
+                </optgroup>
+                {uniqueSystemFonts.length > 0 && (
+                  <optgroup label="系统字体">
+                    {uniqueSystemFonts.map(f => (
+                      <option key={f.label} value={f.value} style={{ fontFamily: f.value }}>{f.label}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </label>
             <label className="flex flex-col">
@@ -365,14 +401,17 @@ function App() {
               书签快捷键
               <ShortcutInput value={settings.bookmarkKey} onChange={val => updateSettings({ bookmarkKey: val })} />
             </div>
+            <div className="flex flex-col text-xs text-gray-600">
+              目录快捷键
+              <ShortcutInput value={settings.tocKey} onChange={val => updateSettings({ tocKey: val })} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
             <label className="flex flex-col text-xs text-gray-600">
               空闲隐藏(分钟)
               <input type="number" min="0" value={settings.idleTimeoutMinutes} onChange={e => updateSettings({ idleTimeoutMinutes: Number(e.target.value) })} className="border rounded px-1 mt-1 bg-white h-7" />
             </label>
-          </div>
-
-          {/* Row 2b: Stealth options */}
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
             <label className="flex flex-col text-xs text-gray-600">
               窗口标题伪装
               <select value={settings.windowTitle} onChange={e => updateSettings({ windowTitle: e.target.value })} className="border rounded px-2 py-1 mt-1 bg-white text-xs">
@@ -414,7 +453,7 @@ function App() {
             )}
             <div className="flex-1" />
             <div className="text-gray-500 text-xs">
-              {isTop ? "📌 已置顶" : "未置顶"} | Ctrl+滚轮调字号 | [ ] 调速
+              {isTop ? "📌 已置顶" : "未置顶"} | Ctrl+滚轮调字号 | {settings.tocKey} 显示目录
             </div>
           </div>
 
@@ -423,50 +462,119 @@ function App() {
             <>
               <div className="h-px w-full bg-gray-300" />
               <div>
-                <div className="text-xs font-bold text-gray-500 mb-1">📂 最近打开</div>
-                <div className="flex flex-col gap-1 max-h-32 overflow-y-auto">
-                  {recentFiles.map((f) => (
-                    <button
-                      key={f.path}
-                      onClick={() => loadFile(f.path, settings.compactMode)}
-                      className="flex items-center justify-between text-left px-2 py-1 rounded hover:bg-gray-200 text-xs text-gray-700 group"
-                    >
-                      <span className="truncate max-w-[80%]">{f.name}</span>
-                      <span className="text-gray-400 text-xs ml-2">{getFilePct(f.path).toFixed(0)}%</span>
-                    </button>
-                  ))}
+                <div className="text-xs font-bold text-gray-500 mb-2">📂 最近打开</div>
+                <div className="flex flex-col gap-1 max-h-40 overflow-y-auto">
+                  {recentFiles.map((f) => {
+                    const pct = getFilePct(f.path);
+                    return (
+                      <button
+                        key={f.path}
+                        onClick={() => loadFile(f.path, settings.compactMode)}
+                        className="flex items-center gap-3 text-left px-2 py-1.5 rounded hover:bg-gray-200 text-xs text-gray-700 group"
+                      >
+                        <span className="text-base">📖</span>
+                        <span className="flex-1 min-w-0">
+                          <span className="block font-medium truncate">{f.name}</span>
+                          <span className="text-gray-400 text-xs">{formatRelativeTime(f.lastOpenedAt)}</span>
+                        </span>
+                        <span className="flex flex-col items-end gap-0.5 flex-shrink-0">
+                          <span className="text-gray-500 font-medium">{pct.toFixed(0)}%</span>
+                          <div className="w-16 h-1.5 bg-gray-300 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-blue-400 rounded-full transition-all"
+                              style={{ width: `${Math.min(100, pct)}%` }}
+                            />
+                          </div>
+                        </span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             </>
           )}
+        </div>
+      )}
 
-          {/* Bookmarks */}
-          {filePath && bookmarks.length > 0 && (
-            <>
-              <div className="h-px w-full bg-gray-300" />
+      {/* TOC Panel — right side float, independent of menu */}
+      {!isThrough && tocVisible && (
+        <div
+          className="absolute top-0 right-0 h-full w-56 bg-white bg-opacity-95 shadow-xl z-50 flex flex-col"
+          style={{ borderLeft: '1px solid #e5e7eb' }}
+        >
+          {/* TOC Header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-gray-200 bg-gray-50">
+            <span className="font-bold text-gray-700 text-sm">
+              {filePath ? filePath.split(/[\\\/]/).pop() : "目录 & 书签"}
+            </span>
+            <button onClick={() => setTocVisible(false)} className="text-gray-400 hover:text-black cursor-pointer text-base leading-none">✕</button>
+          </div>
+
+          <div className="flex-1 overflow-y-auto">
+            {/* Chapter TOC */}
+            {toc.length > 0 && (
               <div>
-                <div className="text-xs font-bold text-gray-500 mb-1">📌 书签 ({filePath.split(/[\\/]/).pop()})</div>
-                <div className="flex flex-col gap-1 max-h-28 overflow-y-auto">
-                  {bookmarks.map((bm) => (
-                    <div key={bm.time} className="flex items-center gap-2 group">
-                      <button
-                        onClick={() => { jumpToBookmark(bm.pos); updateSettings({ menuVisible: false }); }}
-                        className="flex-1 text-left px-2 py-0.5 rounded hover:bg-gray-200 text-xs text-gray-700"
-                      >
-                        {bm.label} — {new Date(bm.time).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                      </button>
-                      <button
-                        onClick={() => removeBookmark(bm.time)}
-                        className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs px-1"
-                      >
-                        ✕
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <div className="px-3 pt-2 pb-1 text-xs font-bold text-blue-600 uppercase tracking-wide">章节目录</div>
+                {toc.map((entry, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => jumpToScrollPct(entry.scrollPct ?? 0)}
+                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center justify-between gap-2"
+                  >
+                    <span className="truncate flex-1">{entry.title}</span>
+                    <span className="text-gray-400 flex-shrink-0">{(entry.scrollPct ?? 0).toFixed(0)}%</span>
+                  </button>
+                ))}
               </div>
-            </>
-          )}
+            )}
+
+            {toc.length === 0 && filePath && (
+              <div className="px-3 pt-3 text-xs text-gray-400">
+                未检测到章节标题
+              </div>
+            )}
+
+            {/* Bookmarks */}
+            {filePath && bookmarks.length > 0 && (
+              <div>
+                <div className="px-3 pt-3 pb-1 text-xs font-bold text-amber-600 uppercase tracking-wide">书签</div>
+                {bookmarks.map((bm) => (
+                  <div key={bm.time} className="flex items-center group">
+                    <button
+                      onClick={() => { jumpToBookmark(bm.pos); setTocVisible(false); }}
+                      className="flex-1 text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-amber-50 hover:text-amber-700 transition-colors"
+                    >
+                      <span className="block font-medium">{bm.label}</span>
+                      <span className="text-gray-400 text-xs">
+                        {new Date(bm.time).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </span>
+                    </button>
+                    <button
+                      onClick={() => removeBookmark(bm.time)}
+                      className="opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-600 text-xs px-2 py-1.5 transition-opacity"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {filePath && toc.length === 0 && bookmarks.length === 0 && (
+              <div className="px-3 py-4 text-xs text-gray-400 text-center">
+                <div className="text-2xl mb-1">📑</div>
+                无目录和书签<br />
+                <span className="text-gray-300">按 {settings.bookmarkKey} 添加书签</span>
+              </div>
+            )}
+
+            {!filePath && (
+              <div className="px-3 py-4 text-xs text-gray-400 text-center">
+                <div className="text-2xl mb-1">📚</div>
+                请先打开一本书
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -485,6 +593,7 @@ function App() {
           lineHeight: settings.lineHeight,
           scrollbarWidth: 'none',
           msOverflowStyle: 'none',
+          paddingRight: tocVisible ? '14rem' : undefined,
         }}
       >
         {content}
@@ -498,10 +607,23 @@ function App() {
             color: settings.fontColor,
             opacity: 0.15,
             fontSize: '11px',
+            right: tocVisible ? '14.5rem' : undefined,
           }}
         >
           {Math.round(progress)}%
         </div>
+      )}
+
+      {/* TOC toggle button — bottom right floating, subtle */}
+      {filePath && !isThrough && (
+        <button
+          onClick={toggleToc}
+          className="absolute bottom-8 left-4 z-30 text-xs opacity-20 hover:opacity-60 transition-opacity cursor-pointer select-none pointer-events-auto"
+          style={{ color: settings.fontColor, fontSize: '11px' }}
+          title={`目录 (${settings.tocKey})`}
+        >
+          目录
+        </button>
       )}
     </div>
   );

@@ -1,5 +1,114 @@
 use tauri::Emitter;
+use tauri::Manager;
 use tauri_plugin_global_shortcut::{Code, GlobalShortcutExt, Modifiers, Shortcut, ShortcutState};
+use std::process::Command;
+
+/// List installed system font families via fc-list (works on macOS and Linux)
+#[tauri::command]
+fn list_system_fonts() -> Vec<String> {
+    // Try fc-list (available on macOS via Homebrew fontconfig, and standard on Linux)
+    let output = Command::new("fc-list")
+        .arg("--format=%{family[0]}\n")
+        .output();
+
+    if let Ok(out) = output {
+        if out.status.success() {
+            let stdout = String::from_utf8_lossy(&out.stdout);
+            let mut fonts: Vec<String> = stdout
+                .lines()
+                .map(|l| l.trim().to_string())
+                .filter(|l| !l.is_empty())
+                .collect();
+            fonts.sort_unstable();
+            fonts.dedup();
+            return fonts;
+        }
+    }
+
+    // Fallback: empty list — frontend will use its built-in presets
+    vec![]
+}
+
+#[derive(serde::Serialize)]
+pub struct TocEntry {
+    title: String,
+    char_offset: usize,
+}
+
+/// Parse epub TOC (table of contents) — returns chapter titles with approximate char offsets in full text
+#[tauri::command]
+fn parse_epub_toc(path: String) -> Result<Vec<TocEntry>, String> {
+    let mut doc = epub::doc::EpubDoc::new(&path).map_err(|e| format!("Failed to open epub: {}", e))?;
+    let mut entries: Vec<TocEntry> = Vec::new();
+    let mut char_offset: usize = 0;
+    let mut chapter_num = 1usize;
+
+    loop {
+        if let Some((content, _mime)) = doc.get_current_str() {
+            let plain = strip_html_tags(&content);
+            let clean = plain
+                .replace("&nbsp;", " ")
+                .replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&amp;", "&");
+            let trimmed = clean.trim().to_string();
+
+            if !trimmed.is_empty() {
+                // Try to extract a meaningful title from HTML headings
+                let title = extract_html_title(&content)
+                    .unwrap_or_else(|| format!("第{}章", chapter_num));
+                entries.push(TocEntry { title, char_offset });
+                char_offset += trimmed.len() + 2; // +2 for the "\n\n" separator
+                chapter_num += 1;
+            }
+        }
+
+        if !doc.go_next() {
+            break;
+        }
+    }
+
+    Ok(entries)
+}
+
+fn extract_html_title(html: &str) -> Option<String> {
+    // Look for <title>...</title>
+    let lower = html.to_lowercase();
+    if let Some(start) = lower.find("<title>") {
+        if let Some(end) = lower[start..].find("</title>") {
+            let t = html[start + 7..start + end].trim().to_string();
+            if !t.is_empty() {
+                return Some(t);
+            }
+        }
+    }
+    // Look for first <h1> or <h2>
+    for tag in &["<h1", "<h2", "<h3"] {
+        if let Some(start) = lower.find(tag) {
+            if let Some(content_start) = lower[start..].find('>') {
+                let rest = &html[start + content_start + 1..];
+                if let Some(end) = rest.to_lowercase().find("</h") {
+                    let t = strip_html_tags(&rest[..end]).trim().to_string();
+                    if !t.is_empty() {
+                        return Some(t);
+                    }
+                }
+            }
+        }
+    }
+    None
+}
+
+fn strip_html_tags(html: &str) -> String {
+    let mut in_tag = false;
+    let mut text = String::with_capacity(html.len());
+    for c in html.chars() {
+        if c == '<' { in_tag = true; }
+        else if c == '>' { in_tag = false; }
+        else if !in_tag { text.push(c); }
+    }
+    text
+}
 
 #[tauri::command]
 fn parse_epub(path: String) -> Result<String, String> {
@@ -138,7 +247,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![parse_epub, register_shortcuts])
+        .invoke_handler(tauri::generate_handler![parse_epub, parse_epub_toc, list_system_fonts, register_shortcuts])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
 }

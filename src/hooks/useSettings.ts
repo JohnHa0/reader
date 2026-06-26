@@ -19,6 +19,7 @@ export interface AppSettings {
   hideTrayInGhost: boolean;
   windowTitle: string;
   bookmarkKey: string;
+  tocKey: string;
   idleAction: 'hide' | 'disguise';
 }
 
@@ -41,6 +42,7 @@ const defaultSettings: AppSettings = {
   hideTrayInGhost: false,
   windowTitle: "Microsoft Excel",
   bookmarkKey: "Alt+B",
+  tocKey: "Alt+C",
   idleAction: 'hide' as const,
 };
 
