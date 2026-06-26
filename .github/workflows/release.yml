@@ -5,6 +5,9 @@ on:
       - 'v*'
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   release-mac:
     strategy:
@@ -28,8 +31,8 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          tagName: app-v${{ github.ref_name }}
-          releaseName: 'Moyu Reader v${{ github.ref_name }}'
+          tagName: app-${{ github.ref_name }}
+          releaseName: 'Moyu Reader ${{ github.ref_name }}'
           releaseBody: 'See the assets to download this version and install.'
           releaseDraft: true
           prerelease: false
@@ -59,7 +62,7 @@ jobs:
             src-tauri/target/release/bundle/deb/*.deb
             src-tauri/target/release/bundle/appimage/*.AppImage
           draft: true
-          tag_name: app-v${{ github.ref_name }}
+          tag_name: app-${{ github.ref_name }}
 
   release-linux-arm64:
     runs-on: ubuntu-22.04
@@ -95,4 +98,4 @@ jobs:
             src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/deb/*.deb
             src-tauri/target/aarch64-unknown-linux-gnu/release/bundle/appimage/*.AppImage
           draft: true
-          tag_name: app-v${{ github.ref_name }}
+          tag_name: app-${{ github.ref_name }}
