@@ -1,8 +1,8 @@
 import { useState, useCallback, useEffect } from "react";
-import { readFile } from "@tauri-apps/plugin-fs";
-import { open } from "@tauri-apps/plugin-dialog";
+import { readBinaryFile } from "@tauri-apps/api/fs";
+import { open } from "@tauri-apps/api/dialog";
 import jschardet from "jschardet";
-import { invoke } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/tauri";
 
 export interface RecentFile {
   path: string;
@@ -113,7 +113,7 @@ export function useReader() {
           })
           .catch(() => setToc([]));
       } else {
-        const fileData = await readFile(path);
+        const fileData = await readBinaryFile(path);
         const sampleStr = String.fromCharCode.apply(null, Array.from(fileData.slice(0, 4096)));
         const detected = jschardet.detect(sampleStr);
         const encoding = detected.encoding || "utf-8";

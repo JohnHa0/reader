@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, useCallback } from "react";
-import { getCurrentWindow } from "@tauri-apps/api/window";
-import { invoke } from "@tauri-apps/api/core";
+import { appWindow } from "@tauri-apps/api/window";
+import { invoke } from "@tauri-apps/api/tauri";
 import { useGhostMode } from "./hooks/useGhostMode";
 import { useReader } from "./hooks/useReader";
 import { useSettings } from "./hooks/useSettings";
@@ -58,7 +58,46 @@ function formatRelativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-function App() {
+// Password Verification Component
+function PasswordScreen({ onVerify }: { onVerify: () => void }) {
+  const [pwd, setPwd] = useState("");
+  const [error, setError] = useState(false);
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (pwd === "18652063629") {
+      onVerify();
+    } else {
+      setError(true);
+    }
+  };
+
+  return (
+    <div className="w-full h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-800" data-tauri-drag-region>
+      <div className="bg-white p-8 rounded-lg shadow-md border border-gray-200">
+        <h2 className="text-lg font-bold mb-4 text-center">隐私锁</h2>
+        <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4">
+          <label className="text-sm text-gray-600">
+            密码提示：我的联系方式
+          </label>
+          <input
+            type="password"
+            value={pwd}
+            onChange={e => { setPwd(e.target.value); setError(false); }}
+            className={`border px-3 py-2 rounded focus:outline-none focus:ring-2 ${error ? "border-red-500 focus:ring-red-300" : "focus:ring-blue-300"}`}
+            autoFocus
+          />
+          {error && <span className="text-xs text-red-500">密码错误</span>}
+          <button type="submit" className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition">
+            解锁
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function MainApp() {
   const { settings, updateSettings } = useSettings();
   const {
     content, filePath, openFileDialog, loadFile,
@@ -92,7 +131,7 @@ function App() {
 
   // Set window title from settings
   useEffect(() => {
-    getCurrentWindow().setTitle(settings.windowTitle).catch(() => {});
+    appWindow.setTitle(settings.windowTitle).catch(() => {});
   }, [settings.windowTitle]);
 
   // Transparent background
@@ -290,7 +329,6 @@ function App() {
   const uniqueSystemFonts = systemFontOptions.filter(
     f => !presetValues.has(f.label.toLowerCase())
   );
-  const allFonts = [...PRESET_FONTS, ...uniqueSystemFonts];
 
   // Full keyboard navigation
   const handleKeyDown = (e: KeyboardEvent) => {
@@ -354,10 +392,10 @@ function App() {
       {/* Drag Regions — hidden when menu is open */}
       {!isThrough && !settings.menuVisible && (
         <>
-          <div data-tauri-drag-region className="absolute top-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }} />
-          <div data-tauri-drag-region className="absolute bottom-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }} />
-          <div data-tauri-drag-region className="absolute top-0 left-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }} />
-          <div data-tauri-drag-region className="absolute top-0 right-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) getCurrentWindow().startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute bottom-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 left-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 right-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
         </>
       )}
 
@@ -373,7 +411,7 @@ function App() {
         <div className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300 max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div data-tauri-drag-region className="flex justify-between items-center cursor-move">
-            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader 控制中心</h2>
+            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v0.1.0</h2>
             <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer text-lg leading-none px-1">✕</button>
           </div>
 
@@ -697,4 +735,12 @@ function App() {
   );
 }
 
-export default App;
+export default function App() {
+  const [isVerified, setIsVerified] = useState(false);
+  
+  if (!isVerified) {
+    return <PasswordScreen onVerify={() => setIsVerified(true)} />
+  }
+
+  return <MainApp />;
+}
