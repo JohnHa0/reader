@@ -81,6 +81,7 @@ async fn register_shortcuts(
     top_key: String,
     through_key: String,
     menu_key: String,
+    bookmark_key: String,
 ) -> Result<(), String> {
     // Unregister all existing shortcuts first to avoid duplicates
     let _ = app.global_shortcut().unregister_all();
@@ -90,6 +91,7 @@ async fn register_shortcuts(
         (top_key, "top".to_string()),
         (through_key, "through".to_string()),
         (menu_key, "menu".to_string()),
+        (bookmark_key, "bookmark".to_string()),
     ];
     
     for (key_str, name) in shortcuts_with_names {
@@ -99,7 +101,26 @@ async fn register_shortcuts(
             let name_clone = name.clone();
             let _ = app.global_shortcut().on_shortcut(shortcut, move |_app, _shortcut, event| {
                 if event.state == ShortcutState::Pressed {
-                    let _ = app_handle.emit("global-keypress", &name_clone);
+                    // Check if window is currently visible
+                    let window_visible = app_handle
+                        .get_webview_window("main")
+                        .and_then(|w| w.is_visible().ok())
+                        .unwrap_or(true);
+
+                    if !window_visible && (name_clone == "boss" || name_clone == "menu") {
+                        // Window is hidden - Rust shows it first, then tells JS to update state.
+                        // We cannot rely on JS receiving events when the webview is suspended.
+                        if let Some(window) = app_handle.get_webview_window("main") {
+                            let _ = window.show();
+                            let _ = window.set_focus();
+                        }
+                        // Emit a special event so JS knows the window was just restored
+                        let payload = format!("{}-show", name_clone);
+                        let _ = app_handle.emit("global-keypress", payload);
+                    } else {
+                        // Window is visible - JS handles everything normally
+                        let _ = app_handle.emit("global-keypress", &name_clone);
+                    }
                 }
             });
         }

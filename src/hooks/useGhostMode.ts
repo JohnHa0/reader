@@ -4,7 +4,18 @@ import { listen } from "@tauri-apps/api/event";
 import { TrayIcon } from "@tauri-apps/api/tray";
 import { invoke } from "@tauri-apps/api/core";
 
-export function useGhostMode(bossKey: string, topKey: string, throughKey: string, menuKey: string, idleTimeoutMinutes: number, hideTrayInGhost: boolean, onMenuToggle: () => void) {
+export function useGhostMode(
+  bossKey: string,
+  topKey: string,
+  throughKey: string,
+  menuKey: string,
+  bookmarkKey: string,
+  idleTimeoutMinutes: number,
+  idleAction: 'hide' | 'disguise',
+  hideTrayInGhost: boolean,
+  onMenuToggle: () => void,
+  onBookmark: () => void,
+) {
   const [isGhost, setIsGhost] = useState(false);
   const [isTop, setIsTop] = useState(false);
   const [isThrough, setIsThrough] = useState(false);
@@ -12,18 +23,16 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
   const isGhostRef = useRef(false);
   const hideTrayRef = useRef(hideTrayInGhost);
 
-  // Keep refs in sync for use inside callbacks that don't re-register
   useEffect(() => { isGhostRef.current = isGhost; }, [isGhost]);
   useEffect(() => { hideTrayRef.current = hideTrayInGhost; }, [hideTrayInGhost]);
 
   const initTray = useCallback(async () => {
     try {
       if (!trayRef.current) {
-        const tray = await TrayIcon.new({ 
-          id: 'moyu-tray', 
+        const tray = await TrayIcon.new({
+          id: 'moyu-tray',
           tooltip: 'Moyu Reader',
           action: () => {
-            // Use ref so the callback always has latest state
             const win = getCurrentWindow();
             if (isGhostRef.current) {
               win.show().then(() => win.setFocus());
@@ -31,9 +40,7 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
               setIsGhost(false);
             } else {
               win.hide();
-              if (hideTrayRef.current) {
-                trayRef.current?.setVisible(false);
-              }
+              if (hideTrayRef.current) trayRef.current?.setVisible(false);
               setIsGhost(true);
             }
           }
@@ -47,9 +54,7 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
 
   useEffect(() => {
     initTray();
-    return () => {
-      trayRef.current?.close();
-    };
+    return () => { trayRef.current?.close(); };
   }, [initTray]);
 
   const toggleGhost = useCallback(async () => {
@@ -62,9 +67,7 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
         setIsGhost(false);
       } else {
         await win.hide();
-        if (trayRef.current && hideTrayInGhost) {
-          await trayRef.current.setVisible(false);
-        }
+        if (trayRef.current && hideTrayInGhost) await trayRef.current.setVisible(false);
         setIsGhost(true);
       }
     } catch (e) {
@@ -74,9 +77,8 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
 
   const toggleTop = useCallback(async () => {
     try {
-      const win = getCurrentWindow();
       const newTop = !isTop;
-      await win.setAlwaysOnTop(newTop);
+      await getCurrentWindow().setAlwaysOnTop(newTop);
       setIsTop(newTop);
     } catch (e) {
       console.error("Failed to toggle top:", e);
@@ -85,45 +87,62 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
 
   const toggleThrough = useCallback(async () => {
     try {
-      const win = getCurrentWindow();
       const newThrough = !isThrough;
-      await win.setIgnoreCursorEvents(newThrough);
+      await getCurrentWindow().setIgnoreCursorEvents(newThrough);
       setIsThrough(newThrough);
     } catch (e) {
       console.error("Failed to toggle through:", e);
     }
   }, [isThrough]);
 
-  // Register global shortcuts via Rust backend (uses tauri-plugin-global-shortcut, works on macOS + Linux X11)
+  // Register global shortcuts via Rust backend
   useEffect(() => {
     invoke("register_shortcuts", {
       bossKey: bossKey || "",
       topKey: topKey || "",
       throughKey: throughKey || "",
       menuKey: menuKey || "",
+      bookmarkKey: bookmarkKey || "",
     }).catch((e) => console.error("Failed to register shortcuts:", e));
-  }, [bossKey, topKey, throughKey, menuKey]);
+  }, [bossKey, topKey, throughKey, menuKey, bookmarkKey]);
 
-  // Listen to shortcut events emitted by the Rust backend
+  // Listen to shortcut events from Rust backend
   useEffect(() => {
     const unlisten = listen<string>('global-keypress', (event) => {
       const name = event.payload;
-      if (name === "boss") toggleGhost();
-      else if (name === "top") toggleTop();
-      else if (name === "through") toggleThrough();
-      else if (name === "menu") onMenuToggle();
+      if (name === "boss") {
+        // Window is visible — JS handles hiding
+        toggleGhost();
+      } else if (name === "boss-show") {
+        // Rust already showed the window; JS just updates state
+        if (trayRef.current) trayRef.current.setVisible(true).catch(() => {});
+        setIsGhost(false);
+      } else if (name === "top") {
+        toggleTop();
+      } else if (name === "through") {
+        toggleThrough();
+      } else if (name === "menu") {
+        onMenuToggle();
+      } else if (name === "menu-show") {
+        // Rust showed window; JS updates state and opens menu
+        if (trayRef.current) trayRef.current.setVisible(true).catch(() => {});
+        setIsGhost(false);
+        onMenuToggle();
+      } else if (name === "bookmark") {
+        onBookmark();
+      }
     });
-
     return () => { unlisten.then(fn => fn()); };
-  }, [toggleGhost, toggleTop, toggleThrough, onMenuToggle]);
+  }, [toggleGhost, toggleTop, toggleThrough, onMenuToggle, onBookmark]);
 
-  // Idle timeout feature (Anti-Gank)
+  // Idle timeout — supports 'hide' (default) or 'disguise' action
   useEffect(() => {
     let timeout: number;
     const resetTimer = () => {
       clearTimeout(timeout);
       if (!isGhost && idleTimeoutMinutes > 0) {
         timeout = window.setTimeout(() => {
+          // idleAction: 'hide' = silently hide; 'disguise' = caller handles via isIdle state
           toggleGhost();
         }, idleTimeoutMinutes * 60 * 1000);
       }
@@ -138,7 +157,7 @@ export function useGhostMode(bossKey: string, topKey: string, throughKey: string
       window.removeEventListener("mousemove", resetTimer);
       window.removeEventListener("keydown", resetTimer);
     };
-  }, [isGhost, toggleGhost, idleTimeoutMinutes]);
+  }, [isGhost, toggleGhost, idleTimeoutMinutes, idleAction]);
 
   return { isGhost, isTop, isThrough, toggleGhost, toggleTop, toggleThrough };
 }

@@ -17,6 +17,9 @@ export interface AppSettings {
   idleTimeoutMinutes: number;
   menuVisible: boolean;
   hideTrayInGhost: boolean;
+  windowTitle: string;
+  bookmarkKey: string;
+  idleAction: 'hide' | 'disguise';
 }
 
 const defaultSettings: AppSettings = {
@@ -36,6 +39,9 @@ const defaultSettings: AppSettings = {
   idleTimeoutMinutes: 3,
   menuVisible: true,
   hideTrayInGhost: false,
+  windowTitle: "Microsoft Excel",
+  bookmarkKey: "Alt+B",
+  idleAction: 'hide' as const,
 };
 
 export function useSettings() {
