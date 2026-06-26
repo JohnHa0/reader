@@ -177,6 +177,9 @@ fn parse_shortcut(shortcut_str: &str) -> Option<Shortcut> {
         "F9" => Code::F9, "F10" => Code::F10, "F11" => Code::F11, "F12" => Code::F12,
         "SPACE" => Code::Space, "ENTER" => Code::Enter, "ESCAPE" | "ESC" => Code::Escape,
         "TAB" => Code::Tab, "BACKSPACE" => Code::Backspace,
+        "UP" | "ARROWUP" => Code::ArrowUp, "DOWN" | "ARROWDOWN" => Code::ArrowDown,
+        "LEFT" | "ARROWLEFT" => Code::ArrowLeft, "RIGHT" | "ARROWRIGHT" => Code::ArrowRight,
+        "PAGEUP" => Code::PageUp, "PAGEDOWN" => Code::PageDown,
         _ => return None,
     };
     
@@ -191,6 +194,8 @@ async fn register_shortcuts(
     through_key: String,
     menu_key: String,
     bookmark_key: String,
+    prev_page_key: String,
+    next_page_key: String,
 ) -> Result<(), String> {
     // Unregister all existing shortcuts first to avoid duplicates
     let _ = app.global_shortcut().unregister_all();
@@ -201,6 +206,8 @@ async fn register_shortcuts(
         (through_key, "through".to_string()),
         (menu_key, "menu".to_string()),
         (bookmark_key, "bookmark".to_string()),
+        (prev_page_key, "prev_page".to_string()),
+        (next_page_key, "next_page".to_string()),
     ];
     
     for (key_str, name) in shortcuts_with_names {

@@ -10,11 +10,15 @@ export function useGhostMode(
   throughKey: string,
   menuKey: string,
   bookmarkKey: string,
+  prevPageKey: string,
+  nextPageKey: string,
   idleTimeoutMinutes: number,
   idleAction: 'hide' | 'disguise',
   hideTrayInGhost: boolean,
   onMenuToggle: () => void,
   onBookmark: () => void,
+  onPrevPage: () => void,
+  onNextPage: () => void,
 ) {
   const [isGhost, setIsGhost] = useState(false);
   const [isTop, setIsTop] = useState(false);
@@ -103,8 +107,10 @@ export function useGhostMode(
       throughKey: throughKey || "",
       menuKey: menuKey || "",
       bookmarkKey: bookmarkKey || "",
+      prev_page_key: prevPageKey || "",
+      next_page_key: nextPageKey || "",
     }).catch((e) => console.error("Failed to register shortcuts:", e));
-  }, [bossKey, topKey, throughKey, menuKey, bookmarkKey]);
+  }, [bossKey, topKey, throughKey, menuKey, bookmarkKey, prevPageKey, nextPageKey]);
 
   // Listen to shortcut events from Rust backend
   useEffect(() => {
@@ -130,10 +136,14 @@ export function useGhostMode(
         onMenuToggle();
       } else if (name === "bookmark") {
         onBookmark();
+      } else if (name === "prev_page") {
+        onPrevPage();
+      } else if (name === "next_page") {
+        onNextPage();
       }
     });
     return () => { unlisten.then(fn => fn()); };
-  }, [toggleGhost, toggleTop, toggleThrough, onMenuToggle, onBookmark]);
+  }, [toggleGhost, toggleTop, toggleThrough, onMenuToggle, onBookmark, onPrevPage, onNextPage]);
 
   // Idle timeout — supports 'hide' (default) or 'disguise' action
   useEffect(() => {

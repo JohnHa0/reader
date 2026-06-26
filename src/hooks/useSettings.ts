@@ -20,6 +20,8 @@ export interface AppSettings {
   windowTitle: string;
   bookmarkKey: string;
   tocKey: string;
+  prevPageKey: string;
+  nextPageKey: string;
   idleAction: 'hide' | 'disguise';
 }
 
@@ -43,6 +45,8 @@ const defaultSettings: AppSettings = {
   windowTitle: "Microsoft Excel",
   bookmarkKey: "Alt+B",
   tocKey: "Alt+C",
+  prevPageKey: "Alt+ArrowUp",
+  nextPageKey: "Alt+ArrowDown",
   idleAction: 'hide' as const,
 };
 

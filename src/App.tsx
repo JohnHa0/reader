@@ -174,12 +174,28 @@ function App() {
     }
   }, [filePath, addBookmark, showToast]);
 
+  // Page turning logic (scrolls by ~80% of clientHeight)
+  const handlePrevPage = useCallback(() => {
+    if (scrollRef.current) {
+      const pageH = scrollRef.current.clientHeight * 0.8;
+      scrollRef.current.scrollTop -= pageH;
+    }
+  }, []);
+
+  const handleNextPage = useCallback(() => {
+    if (scrollRef.current) {
+      const pageH = scrollRef.current.clientHeight * 0.8;
+      scrollRef.current.scrollTop += pageH;
+    }
+  }, []);
+
   const { isGhost, isTop, isThrough } = useGhostMode(
     settings.bossKey, settings.topKey, settings.throughKey,
     settings.menuKey, settings.bookmarkKey,
+    settings.prevPageKey, settings.nextPageKey,
     settings.idleTimeoutMinutes, settings.idleAction,
     settings.hideTrayInGhost,
-    toggleMenu, onBookmark,
+    toggleMenu, onBookmark, handlePrevPage, handleNextPage,
   );
 
   // Local menu key fallback (when window has focus / Wayland)
@@ -214,11 +230,42 @@ function App() {
       ) {
         e.preventDefault();
         toggleMenu();
+        return;
+      }
+
+      // Prev Page fallback
+      const prevParts = settings.prevPageKey.split("+");
+      const prevKeyStr = prevParts[prevParts.length - 1] ?? "";
+      const prevNeedsAlt = prevParts.includes("Alt");
+      const prevNeedsCtrl = prevParts.includes("CommandOrControl") || prevParts.includes("Ctrl");
+      if (
+        (prevNeedsAlt ? e.altKey : !e.altKey) &&
+        (prevNeedsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
+        matchesKey(e, prevKeyStr)
+      ) {
+        e.preventDefault();
+        handlePrevPage();
+        return;
+      }
+
+      // Next Page fallback
+      const nextParts = settings.nextPageKey.split("+");
+      const nextKeyStr = nextParts[nextParts.length - 1] ?? "";
+      const nextNeedsAlt = nextParts.includes("Alt");
+      const nextNeedsCtrl = nextParts.includes("CommandOrControl") || nextParts.includes("Ctrl");
+      if (
+        (nextNeedsAlt ? e.altKey : !e.altKey) &&
+        (nextNeedsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
+        matchesKey(e, nextKeyStr)
+      ) {
+        e.preventDefault();
+        handleNextPage();
+        return;
       }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.menuKey, settings.tocKey, toggleMenu, toggleToc]);
+  }, [settings.menuKey, settings.tocKey, settings.prevPageKey, settings.nextPageKey, toggleMenu, toggleToc, handlePrevPage, handleNextPage]);
 
   if (isGhost) return null;
 
@@ -393,7 +440,7 @@ function App() {
           <div className="h-px w-full bg-gray-300" />
 
           {/* Row 2: Shortcuts + Stealth */}
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
             <div className="flex flex-col text-xs text-gray-600">
               老板键 (隐身)
               <ShortcutInput value={settings.bossKey} onChange={val => updateSettings({ bossKey: val })} />
@@ -417,6 +464,14 @@ function App() {
             <div className="flex flex-col text-xs text-gray-600">
               目录快捷键
               <ShortcutInput value={settings.tocKey} onChange={val => updateSettings({ tocKey: val })} />
+            </div>
+            <div className="flex flex-col text-xs text-gray-600">
+              上一页快捷键
+              <ShortcutInput value={settings.prevPageKey} onChange={val => updateSettings({ prevPageKey: val })} />
+            </div>
+            <div className="flex flex-col text-xs text-gray-600">
+              下一页快捷键
+              <ShortcutInput value={settings.nextPageKey} onChange={val => updateSettings({ nextPageKey: val })} />
             </div>
           </div>
 
