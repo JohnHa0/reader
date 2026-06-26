@@ -49,7 +49,7 @@ jobs:
           curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
       - name: Build
         run: |
-          source $HOME/.cargo/env
+          . $HOME/.cargo/env
           npm install
           npm run tauri build
       - name: Upload amd64 assets
@@ -84,7 +84,7 @@ jobs:
             apt-get install -y nodejs
             curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
           run: |
-            source $HOME/.cargo/env
+            . $HOME/.cargo/env
             cd /workspace
             npm install
             npm run tauri build -- --target aarch64-unknown-linux-gnu
