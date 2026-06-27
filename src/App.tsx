@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { appWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/tauri";
 import { useGhostMode } from "./hooks/useGhostMode";
-import { useReader } from "./hooks/useReader";
+import { useReader, applyCompact } from "./hooks/useReader";
 import { useSettings } from "./hooks/useSettings";
 import "./App.css";
 import { ShortcutInput } from "./components/ShortcutInput";
@@ -94,12 +94,22 @@ function PasswordScreen({ onVerify }: { onVerify: () => void }) {
 function MainApp() {
   const { settings, updateSettings } = useSettings();
   const {
-    content, filePath, openFileDialog, loadFile,
+    rawContent, placeholder, isEpub, filePath, openFileDialog, loadFile,
     saveProgress, loadProgress,
     recentFiles, getFilePct,
     bookmarks, addBookmark, removeBookmark,
-    toc,
-  } = useReader(settings.compactMode);
+    tocRaw,
+  } = useReader();
+
+  // Compute displayed content here so compactMode changes are 100% immediate
+  const content = useMemo(() => {
+    if (!rawContent) return placeholder;
+    if (isEpub || !settings.compactMode) return rawContent;
+    return applyCompact(rawContent);
+  }, [rawContent, isEpub, settings.compactMode, placeholder]);
+
+  // Use tocRaw (based on rawContent offsets) for stable TOC entries
+  const toc = tocRaw;
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
@@ -316,15 +326,16 @@ function MainApp() {
 
   if (isGhost) return null;
 
-  // Jump to position by character offset — reliable cross-platform scroll
+  // Jump to TOC entry — use rawContent.length for stable percentage
+  // since charOffsets in tocRaw are from rawContent (not compacted)
   const jumpToCharOffset = (charOffset: number) => {
     setTocVisible(false);
-    // Use double-rAF to ensure DOM has settled after TOC panel closing causes reflow
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const container = scrollRef.current;
         if (!container) return;
-        const pct = content.length > 0 ? charOffset / content.length : 0;
+        const refLen = rawContent.length > 0 ? rawContent.length : 1;
+        const pct = charOffset / refLen;
         const { scrollHeight, clientHeight } = container;
         container.scrollTop = pct * (scrollHeight - clientHeight);
       });
