@@ -460,7 +460,7 @@ function MainApp() {
         <div className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300 max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div data-tauri-drag-region className="flex justify-between items-center cursor-move">
-            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v1.0.0</h2>
+            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v1.1.0</h2>
             <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer text-lg leading-none px-1">✕</button>
           </div>
 
