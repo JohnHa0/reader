@@ -50,8 +50,8 @@ export function extractTxtToc(content: string): TocEntry[] {
  */
 export function applyRemoveEmptyLines(rawText: string): string {
   let text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  // Strip leading/trailing whitespace from each line (incl. Chinese full-width space)
-  text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
+  // Strip leading/trailing whitespace from each line (excluding \n but including all other whitespaces)
+  text = text.replace(/^[^\S\n]+|[^\S\n]+$/gm, '');
   // Collapse 2+ consecutive newlines → single newline (removes empty lines)
   text = text.replace(/\n{2,}/g, '\n');
   return text;
@@ -65,7 +65,7 @@ export function applyRemoveEmptyLines(rawText: string): string {
 export function applySmartFormat(rawText: string): string {
   let text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   // Strip leading/trailing whitespace from each line
-  text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
+  text = text.replace(/^[^\S\n]+|[^\S\n]+$/gm, '');
   // Remove ALL newlines — everything becomes one continuous stream
   text = text.replace(/\n+/g, '');
   return text;

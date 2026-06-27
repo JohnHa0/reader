@@ -109,8 +109,6 @@ function MainApp() {
     let text: string;
     if (!rawContent) {
       text = placeholder;
-    } else if (isEpub) {
-      text = rawContent;
     } else if (settings.smartFormat) {
       text = applySmartFormat(rawContent);
     } else if (settings.compactMode) {
