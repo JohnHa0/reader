@@ -58,41 +58,35 @@ function formatRelativeTime(ts: number): string {
   return new Date(ts).toLocaleDateString("zh-CN", { month: "numeric", day: "numeric" });
 }
 
-// Password Verification Component
+// Disguised Password Verification Component
 function PasswordScreen({ onVerify }: { onVerify: () => void }) {
   const [pwd, setPwd] = useState("");
-  const [error, setError] = useState(false);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (pwd === "18652063629") {
       onVerify();
     } else {
-      setError(true);
+      setPwd(""); // Silently fail and clear
     }
   };
 
   return (
-    <div className="w-full h-screen flex flex-col items-center justify-center bg-gray-50 text-gray-800" data-tauri-drag-region>
-      <div className="bg-white p-8 rounded-lg shadow-md border border-gray-200">
-        <h2 className="text-lg font-bold mb-4 text-center">隐私锁</h2>
-        <form onSubmit={handleSubmit} className="flex flex-col items-center gap-4">
-          <label className="text-sm text-gray-600">
-            密码提示：我的联系方式
-          </label>
-          <input
-            type="password"
-            value={pwd}
-            onChange={e => { setPwd(e.target.value); setError(false); }}
-            className={`border px-3 py-2 rounded focus:outline-none focus:ring-2 ${error ? "border-red-500 focus:ring-red-300" : "focus:ring-blue-300"}`}
-            autoFocus
-          />
-          {error && <span className="text-xs text-red-500">密码错误</span>}
-          <button type="submit" className="w-full bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded transition">
-            解锁
-          </button>
-        </form>
+    <div className="w-full h-screen flex flex-col items-center justify-center bg-white text-gray-800 select-none" data-tauri-drag-region>
+      <div className="flex flex-col items-center pointer-events-none">
+        <h1 className="text-4xl font-bold text-gray-300 mb-1 tracking-wider">404</h1>
+        <p className="text-xs text-gray-400 mb-12 font-sans tracking-wide">Not Found</p>
       </div>
+        
+      <form onSubmit={handleSubmit} className="opacity-0 hover:opacity-30 transition-opacity duration-700">
+        <input
+          type="password"
+          value={pwd}
+          onChange={e => setPwd(e.target.value)}
+          className="border-b border-gray-200 px-2 py-1 outline-none text-center text-xs text-gray-400 bg-transparent w-24"
+          autoFocus
+        />
+      </form>
     </div>
   );
 }

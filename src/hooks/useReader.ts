@@ -81,8 +81,10 @@ export function useReader(compactMode: boolean) {
     if (isEpub) return rawText; // Don't alter EPUB text to preserve Rust TOC offsets
     let text = rawText.replace(/\r\n/g, '\n');
     if (compact) {
+      // Remove leading spaces/indents for every line
+      text = text.replace(/^[ \t\u3000]+/gm, '');
+      // Collapse multiple consecutive newlines (empty lines) into a single newline
       text = text.replace(/\n\s*\n/g, '\n');
-      text = text.replace(/([^\n])\n([^\n])/g, '$1$2');
     }
     return text;
   };
