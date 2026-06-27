@@ -105,7 +105,7 @@ function MainApp() {
     recentFiles, getFilePct,
     bookmarks, addBookmark, removeBookmark,
     toc,
-  } = useReader();
+  } = useReader(settings.compactMode);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
@@ -301,20 +301,50 @@ function MainApp() {
         handleNextPage();
         return;
       }
+      // Bookmark fallback
+      const bookmarkParts = settings.bookmarkKey.split("+");
+      const bookmarkKeyStr = bookmarkParts[bookmarkParts.length - 1] ?? "";
+      const bookmarkNeedsAlt = bookmarkParts.includes("Alt");
+      const bookmarkNeedsCtrl = bookmarkParts.includes("CommandOrControl") || bookmarkParts.includes("Ctrl");
+      if (
+        (bookmarkNeedsAlt ? e.altKey : !e.altKey) &&
+        (bookmarkNeedsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
+        matchesKey(e, bookmarkKeyStr)
+      ) {
+        e.preventDefault();
+        onBookmark();
+        return;
+      }
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.menuKey, settings.tocKey, settings.prevPageKey, settings.nextPageKey, toggleMenu, toggleToc, handlePrevPage, handleNextPage]);
+  }, [settings.menuKey, settings.tocKey, settings.prevPageKey, settings.nextPageKey, settings.bookmarkKey, toggleMenu, toggleToc, handlePrevPage, handleNextPage, onBookmark]);
 
   if (isGhost) return null;
 
-  // Jump to position by scroll percentage
-  const jumpToScrollPct = (pct: number) => {
-    if (scrollRef.current) {
-      const { scrollHeight, clientHeight } = scrollRef.current;
-      scrollRef.current.scrollTop = ((pct / 100) * (scrollHeight - clientHeight));
-      setTocVisible(false);
-    }
+  // Jump to position by exact character offset
+  const jumpToCharOffset = (charOffset: number) => {
+    setTocVisible(false);
+    setTimeout(() => {
+      const container = scrollRef.current;
+      if (!container) return;
+      
+      const textNode = container.firstChild;
+      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
+
+      try {
+        const range = document.createRange();
+        range.setStart(textNode, charOffset);
+        range.setEnd(textNode, charOffset);
+        
+        const rect = range.getBoundingClientRect();
+        const containerRect = container.getBoundingClientRect();
+        
+        container.scrollTop += (rect.top - containerRect.top);
+      } catch (e) {
+        console.error("Failed to jump to char offset", e);
+      }
+    }, 50);
   };
 
   const jumpToBookmark = (pos: number) => {
@@ -392,10 +422,10 @@ function MainApp() {
       {/* Drag Regions — hidden when menu is open */}
       {!isThrough && !settings.menuVisible && (
         <>
-          <div data-tauri-drag-region className="absolute top-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
-          <div data-tauri-drag-region className="absolute bottom-0 left-0 w-full h-6 z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
-          <div data-tauri-drag-region className="absolute top-0 left-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
-          <div data-tauri-drag-region className="absolute top-0 right-0 w-6 h-full z-50 cursor-move" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 left-0 w-full h-6 z-50" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute bottom-0 left-0 w-full h-6 z-50" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 left-0 w-6 h-full z-50" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
+          <div data-tauri-drag-region className="absolute top-0 right-0 w-6 h-full z-50" onPointerDown={(e) => { if (e.button === 0) appWindow.startDragging(); }} />
         </>
       )}
 
@@ -411,13 +441,13 @@ function MainApp() {
         <div className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300 max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div data-tauri-drag-region className="flex justify-between items-center cursor-move">
-            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v0.1.0</h2>
+            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v1.0.0</h2>
             <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer text-lg leading-none px-1">✕</button>
           </div>
 
           {/* Row 1: File + Display */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 items-end">
-            <button onClick={() => openFileDialog(settings.compactMode)} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded w-full">
+            <button onClick={() => openFileDialog()} className="bg-blue-600 hover:bg-blue-700 text-white font-bold py-1 px-3 rounded w-full">
               打开本地小说
             </button>
             <label className="flex flex-col">
@@ -575,7 +605,7 @@ function MainApp() {
                     return (
                       <button
                         key={f.path}
-                        onClick={() => loadFile(f.path, settings.compactMode)}
+                        onClick={() => loadFile(f.path)}
                         className="flex items-center gap-3 text-left px-2 py-1.5 rounded hover:bg-gray-200 text-xs text-gray-700 group"
                       >
                         <span className="text-base">📖</span>
@@ -621,16 +651,19 @@ function MainApp() {
             {toc.length > 0 && (
               <div>
                 <div className="px-3 pt-2 pb-1 text-xs font-bold text-blue-600 uppercase tracking-wide">章节目录</div>
-                {toc.map((entry, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => jumpToScrollPct(entry.scrollPct ?? 0)}
-                    className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center justify-between gap-2"
-                  >
-                    <span className="truncate flex-1">{entry.title}</span>
-                    <span className="text-gray-400 flex-shrink-0">{(entry.scrollPct ?? 0).toFixed(0)}%</span>
-                  </button>
-                ))}
+                {toc.map((entry, idx) => {
+                  const pct = content.length > 0 ? (entry.charOffset / content.length) * 100 : 0;
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => jumpToCharOffset(entry.charOffset)}
+                      className="w-full text-left px-3 py-1.5 text-xs text-gray-700 hover:bg-blue-50 hover:text-blue-700 transition-colors flex items-center justify-between gap-2"
+                    >
+                      <span className="truncate flex-1">{entry.title}</span>
+                      <span className="text-gray-400 flex-shrink-0">{pct.toFixed(0)}%</span>
+                    </button>
+                  );
+                })}
               </div>
             )}
 
@@ -691,7 +724,7 @@ function MainApp() {
         onScroll={handleScroll}
         onKeyDown={(e) => handleKeyDown(e as unknown as KeyboardEvent)}
         tabIndex={0}
-        className="flex-1 w-full h-full overflow-y-auto p-4 cursor-move whitespace-pre-wrap break-words outline-none"
+        className="flex-1 w-full h-full overflow-y-auto p-4 whitespace-pre-wrap break-words outline-none"
         style={{
           fontSize: `${settings.fontSize}px`,
           fontFamily: settings.fontFamily,
@@ -706,7 +739,7 @@ function MainApp() {
       </div>
 
       {/* Progress indicator — bottom right, very subtle */}
-      {filePath && (
+      {filePath && settings.menuVisible && (
         <div
           className="absolute bottom-8 right-8 text-xs pointer-events-none z-30 transition-opacity duration-300"
           style={{
@@ -721,7 +754,7 @@ function MainApp() {
       )}
 
       {/* TOC toggle button — bottom right floating, subtle */}
-      {filePath && !isThrough && (
+      {filePath && !isThrough && settings.menuVisible && (
         <button
           onClick={toggleToc}
           className="absolute bottom-8 left-4 z-30 text-xs opacity-20 hover:opacity-60 transition-opacity cursor-pointer select-none pointer-events-auto"

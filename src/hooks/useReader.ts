@@ -20,7 +20,6 @@ export interface Bookmark {
 export interface TocEntry {
   title: string;
   charOffset: number;
-  scrollPct?: number; // estimated 0-100
 }
 
 // Common Chinese/English chapter title patterns for txt files
@@ -36,21 +35,23 @@ function extractTxtToc(content: string): TocEntry[] {
   const entries: TocEntry[] = [];
   let charOffset = 0;
 
-  for (const line of lines) {
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
     const trimmed = line.trim();
     if (trimmed.length > 0 && trimmed.length < 60) {
       const isChapter = CHAPTER_PATTERNS.some(p => p.test(trimmed));
       if (isChapter) {
-        entries.push({ title: trimmed, charOffset });
+        entries.push({ title: trimmed, charOffset }); 
       }
     }
-    charOffset += line.length + 1; // +1 for the '\n'
+    charOffset += line.length + 1; // +1 for '\n'
   }
 
   return entries;
 }
 
-export function useReader() {
+export function useReader(compactMode: boolean) {
+  const [rawContent, setRawContent] = useState<string>("");
   const [content, setContent] = useState<string>(
     "拖拽 txt/epub 文件到此处开始摸鱼...\n您可以按住任意文字区域拖动窗口。\n\n按 Alt+H 隐藏/显示\n按 Alt+T 置顶/取消置顶\n按 Alt+P 鼠标穿透/取消\n按 Alt+B 添加书签\n按 Alt+C 显示目录"
   );
@@ -76,8 +77,9 @@ export function useReader() {
 
   const getFileName = (path: string) => path.split(/[\\\/]/).pop() || path;
 
-  const cleanText = (rawText: string, compact: boolean) => {
-    let text = rawText;
+  const cleanText = (rawText: string, compact: boolean, isEpub: boolean) => {
+    if (isEpub) return rawText; // Don't alter EPUB text to preserve Rust TOC offsets
+    let text = rawText.replace(/\r\n/g, '\n');
     if (compact) {
       text = text.replace(/\n\s*\n/g, '\n');
       text = text.replace(/([^\n])\n([^\n])/g, '$1$2');
@@ -95,7 +97,7 @@ export function useReader() {
     });
   }, []);
 
-  const loadFile = useCallback(async (path: string, compact: boolean) => {
+  const loadFile = useCallback(async (path: string) => {
     try {
       let extractedText = "";
       const epub = path.toLowerCase().endsWith(".epub");
@@ -105,11 +107,7 @@ export function useReader() {
         // Load TOC asynchronously
         invoke<TocEntry[]>("parse_epub_toc", { path })
           .then(entries => {
-            const total = extractedText.length;
-            setToc(entries.map(e => ({
-              ...e,
-              scrollPct: total > 0 ? (e.charOffset / total) * 100 : 0,
-            })));
+            setToc(entries);
           })
           .catch(() => setToc([]));
       } else {
@@ -121,7 +119,8 @@ export function useReader() {
         extractedText = decoder.decode(fileData);
       }
 
-      const cleaned = cleanText(extractedText, compact);
+      const cleaned = cleanText(extractedText, compactMode, epub);
+      setRawContent(extractedText);
       setContent(cleaned);
       setFilePath(path);
       addToRecent(path);
@@ -130,26 +129,32 @@ export function useReader() {
       // For txt, extract TOC from cleaned text
       if (!epub) {
         const tocEntries = extractTxtToc(cleaned);
-        const total = cleaned.length;
-        setToc(tocEntries.map(e => ({
-          ...e,
-          scrollPct: total > 0 ? (e.charOffset / total) * 100 : 0,
-        })));
+        setToc(tocEntries);
       }
     } catch (e) {
       console.error("Failed to load file:", e);
       setContent("文件加载失败：" + String(e));
     }
-  }, [addToRecent]);
+  }, [addToRecent, compactMode]);
 
-  const openFileDialog = useCallback(async (compact: boolean) => {
+  // React to compactMode changes immediately
+  useEffect(() => {
+    if (rawContent && filePath && !filePath.toLowerCase().endsWith(".epub")) {
+      const cleaned = cleanText(rawContent, compactMode, false);
+      setContent(cleaned);
+      const tocEntries = extractTxtToc(cleaned);
+      setToc(tocEntries);
+    }
+  }, [compactMode, rawContent, filePath]);
+
+  const openFileDialog = useCallback(async () => {
     try {
       const selected = await open({
         multiple: false,
         filters: [{ name: 'Text/Book', extensions: ['txt', 'epub'] }]
       });
       if (selected && typeof selected === "string") {
-        await loadFile(selected, compact);
+        await loadFile(selected);
       }
     } catch (e) {
       console.error("Dialog error:", e);
@@ -159,8 +164,8 @@ export function useReader() {
   // Load last file on startup
   useEffect(() => {
     const lastPath = localStorage.getItem("last_file_path");
-    if (lastPath) {
-      loadFile(lastPath, true);
+    if (lastPath && !filePath) {
+      loadFile(lastPath);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
