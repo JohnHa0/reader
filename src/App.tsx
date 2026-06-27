@@ -668,11 +668,12 @@ function MainApp() {
 
           <div className="flex-1 overflow-y-auto">
             {/* Chapter TOC */}
-            {toc.length > 0 && (
+            {toc.length > 0 && !settings.smartFormat && (
               <div>
                 <div className="px-3 pt-2 pb-1 text-xs font-bold text-blue-600 uppercase tracking-wide">章节目录</div>
                 {toc.map((entry, idx) => {
-                  const pct = content.length > 0 ? (entry.charOffset / content.length) * 100 : 0;
+                  // entry.charOffset = line index; pct = lineIndex / totalLines
+                  const pct = contentLines.length > 0 ? (entry.charOffset / contentLines.length) * 100 : 0;
                   return (
                     <button
                       key={idx}
@@ -687,7 +688,13 @@ function MainApp() {
               </div>
             )}
 
-            {toc.length === 0 && filePath && (
+            {settings.smartFormat && filePath && (
+              <div className="px-3 pt-3 text-xs text-gray-400">
+                智能排版模式下暂不支持目录跳转
+              </div>
+            )}
+
+            {toc.length === 0 && filePath && !settings.smartFormat && (
               <div className="px-3 pt-3 text-xs text-gray-400">
                 未检测到章节标题
               </div>

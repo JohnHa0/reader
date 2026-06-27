@@ -45,34 +45,34 @@ export function extractTxtToc(content: string): TocEntry[] {
 }
 
 /**
- * Level 1 — "智能去空行": strip leading indents and collapse extra blank lines.
- * Each paragraph keeps its own line; soft-wraps within paragraphs are removed.
+ * Level 1 — "去除空行": collapse blank lines and remove leading indents.
+ * Each paragraph stays on its own line; only blank separators are removed.
  */
 export function applyRemoveEmptyLines(rawText: string): string {
-  let text = rawText.replace(/\r\n/g, '\n');
+  let text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   // Strip leading/trailing whitespace from each line (incl. Chinese full-width space)
   text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
-  // Collapse 2+ consecutive newlines → single newline
+  // Collapse 2+ consecutive newlines → single newline (removes empty lines)
   text = text.replace(/\n{2,}/g, '\n');
   return text;
 }
 
 /**
- * Level 2 — "智能排版": remove ALL newlines for fully continuous flowing text.
- * Paragraph boundaries are also removed; the window width drives line wrapping.
+ * Level 2 — "智能排版": remove ALL newlines and empty lines for fully continuous flowing text.
+ * Every paragraph is joined together; the window width drives all line wrapping.
+ * Chinese text does not need spaces between joined paragraphs.
  */
 export function applySmartFormat(rawText: string): string {
-  let text = rawText.replace(/\r\n/g, '\n');
+  let text = rawText.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
   // Strip leading/trailing whitespace from each line
   text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
-  // Remove ALL newlines — everything flows as one continuous stream
+  // Remove ALL newlines — everything becomes one continuous stream
   text = text.replace(/\n+/g, '');
   return text;
 }
 
-// Keep applyCompact as alias of applyRemoveEmptyLines for backward compat
+// applyCompact is an alias for Level 1
 export const applyCompact = applyRemoveEmptyLines;
-
 
 const PLACEHOLDER = "拖拽 txt/epub 文件到此处开始摸鱼...\n您可以按住任意文字区域拖动窗口。\n\n按 Alt+H 隐藏/显示\n按 Alt+T 置顶/取消置顶\n按 Alt+P 鼠标穿透/取消\n按 Alt+B 添加书签\n按 Alt+C 显示目录";
 
