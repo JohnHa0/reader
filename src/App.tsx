@@ -110,11 +110,14 @@ function MainApp() {
     return rawContent;
   }, [rawContent, isEpub, settings.compactMode, settings.smartFormat, placeholder]);
 
-  // Build TOC from displayed content — charOffsets MUST match content.length for correct jump
+  // Split into lines for paragraph-level rendering (enables scrollIntoView TOC navigation)
+  const contentLines = useMemo(() => content.split('\n'), [content]);
+
+  // Build TOC from the displayed content lines
   const toc = useMemo(() => {
-    if (!rawContent || isEpub) return tocRaw; // epub toc from Rust backend
+    if (!rawContent || isEpub) return tocRaw;
     if (!filePath) return [];
-    return extractTxtToc(content); // always derived from displayed content
+    return extractTxtToc(content);
   }, [content, rawContent, isEpub, filePath, tocRaw]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -332,19 +335,28 @@ function MainApp() {
 
   if (isGhost) return null;
 
-  // Jump to TOC entry — charOffset and content.length are now from the same text
-  const jumpToCharOffset = (charOffset: number) => {
+  // Jump to TOC entry using scrollIntoView for txt (line-based), percentage for epub
+  const jumpToCharOffset = (lineIndexOrOffset: number) => {
     setTocVisible(false);
-    requestAnimationFrame(() => {
+    if (isEpub) {
+      // Epub uses char offset percentage
       requestAnimationFrame(() => {
-        const container = scrollRef.current;
-        if (!container) return;
-        // pct uses content.length which matches the charOffset from extractTxtToc(content)
-        const pct = Math.min(charOffset / Math.max(content.length, 1), 1);
-        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
-        container.scrollTop = pct * maxScroll;
+        requestAnimationFrame(() => {
+          const container = scrollRef.current;
+          if (!container) return;
+          const pct = Math.min(lineIndexOrOffset / Math.max(rawContent.length, 1), 1);
+          container.scrollTop = pct * Math.max(0, container.scrollHeight - container.clientHeight);
+        });
       });
-    });
+    } else {
+      // Txt uses scrollIntoView on the line element
+      requestAnimationFrame(() => {
+        const el = document.getElementById(`reader-ln-${lineIndexOrOffset}`);
+        if (el) {
+          el.scrollIntoView({ block: 'start' });
+        }
+      });
+    }
   };
 
   const jumpToBookmark = (pos: number) => {
@@ -743,7 +755,15 @@ function MainApp() {
           paddingRight: tocVisible ? '14rem' : undefined,
         }}
       >
-        {content}
+        {contentLines.map((line, idx) => (
+          <div
+            key={idx}
+            id={`reader-ln-${idx}`}
+            style={{ minHeight: line.trim() === '' ? `${settings.lineHeight}em` : undefined }}
+          >
+            {line || '\u00a0'}
+          </div>
+        ))}
       </div>
 
       {/* Progress indicator — bottom right, very subtle */}

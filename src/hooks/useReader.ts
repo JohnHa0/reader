@@ -30,18 +30,16 @@ const CHAPTER_PATTERNS = [
 ];
 
 export function extractTxtToc(content: string): TocEntry[] {
-  const lines = content.split('\n');
+  const lines = content.replace(/\r\n/g, '\n').split('\n');
   const entries: TocEntry[] = [];
-  let charOffset = 0;
   for (let i = 0; i < lines.length; i++) {
-    const line = lines[i];
-    const trimmed = line.trim();
+    const trimmed = lines[i].trim();
     if (trimmed.length > 0 && trimmed.length < 60) {
       if (CHAPTER_PATTERNS.some(p => p.test(trimmed))) {
-        entries.push({ title: trimmed, charOffset });
+        // charOffset stores the line index for scrollIntoView-based navigation
+        entries.push({ title: trimmed, charOffset: i });
       }
     }
-    charOffset += line.length + 1;
   }
   return entries;
 }
