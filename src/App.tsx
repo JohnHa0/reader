@@ -101,17 +101,26 @@ function MainApp() {
     tocRaw,
   } = useReader();
 
-  // Compute displayed content — reactive to both compactMode and smartFormat
-  const content = useMemo(() => {
-    if (!rawContent) return placeholder;
-    if (isEpub) return rawContent;
-    if (settings.smartFormat) return applySmartFormat(rawContent);
-    if (settings.compactMode) return applyCompact(rawContent);
-    return rawContent;
-  }, [rawContent, isEpub, settings.compactMode, settings.smartFormat, placeholder]);
+  // Compute displayed content — use useState+useEffect to guarantee re-render on setting change
+  const [content, setContent] = useState<string>(placeholder);
+  const [contentLines, setContentLines] = useState<string[]>([placeholder]);
 
-  // Split into lines for paragraph-level rendering (enables scrollIntoView TOC navigation)
-  const contentLines = useMemo(() => content.split('\n'), [content]);
+  useEffect(() => {
+    let text: string;
+    if (!rawContent) {
+      text = placeholder;
+    } else if (isEpub) {
+      text = rawContent;
+    } else if (settings.smartFormat) {
+      text = applySmartFormat(rawContent);
+    } else if (settings.compactMode) {
+      text = applyCompact(rawContent);
+    } else {
+      text = rawContent;
+    }
+    setContent(text);
+    setContentLines(text.split('\n'));
+  }, [rawContent, isEpub, settings.compactMode, settings.smartFormat, placeholder]);
 
   // Build TOC from the displayed content lines
   const toc = useMemo(() => {
@@ -515,13 +524,13 @@ function MainApp() {
               <input type="checkbox" checked={settings.compactMode} onChange={e => {
                 updateSettings({ compactMode: e.target.checked, smartFormat: false });
               }} className="w-4 h-4" />
-              去除空行 <span className="text-xs font-normal text-gray-400">({content.split('\n').length}行)</span>
+              去除空行 <span className="text-xs font-normal text-gray-400">({contentLines.length}行)</span>
             </label>
             <label className="flex items-center gap-2 font-bold cursor-pointer">
               <input type="checkbox" checked={settings.smartFormat} onChange={e => {
                 updateSettings({ smartFormat: e.target.checked, compactMode: false });
               }} className="w-4 h-4" />
-              智能排版 <span className="text-xs font-normal text-gray-400">(合并换行)</span>
+              智能排版 <span className="text-xs font-normal text-gray-400">({contentLines.length}行)</span>
             </label>
           </div>
 
