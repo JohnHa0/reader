@@ -8,6 +8,7 @@ use std::process::Command;
 use serde::{Deserialize, Serialize};
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct TocEntry {
     title: String,
     char_offset: usize,
@@ -51,7 +52,7 @@ fn parse_epub_toc(path: String) -> Result<Vec<TocEntry>, String> {
                 let title = extract_html_title(&content)
                     .unwrap_or_else(|| format!("第{}章", chapter_num));
                 entries.push(TocEntry { title, char_offset });
-                char_offset += trimmed.len() + 2;
+                char_offset += trimmed.chars().count() + 2;
                 chapter_num += 1;
             }
         }
