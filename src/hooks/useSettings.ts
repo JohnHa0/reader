@@ -32,7 +32,7 @@ const defaultSettings: AppSettings = {
   bgColor: "#ffffff",
   bgOpacity: 0.8,
   lineHeight: 1.6,
-  compactMode: true,
+  compactMode: false,
   autoScroll: false,
   autoScrollSpeed: 0.5,
   bossKey: "Alt+H",
@@ -50,16 +50,31 @@ const defaultSettings: AppSettings = {
   idleAction: 'hide' as const,
 };
 
+const SETTINGS_VERSION = 2;
+
 export function useSettings() {
   const [settings, setSettingsState] = useState<AppSettings>(() => {
     const saved = localStorage.getItem("moyu_settings");
-    if (saved) {
+    const ver = parseInt(localStorage.getItem("moyu_settings_ver") || "0");
+    if (saved && ver >= SETTINGS_VERSION) {
       try {
         return { ...defaultSettings, ...JSON.parse(saved) };
       } catch (e) {
         console.error("Failed to parse settings", e);
       }
+    } else if (saved && ver < SETTINGS_VERSION) {
+      // Migrate old settings but reset compactMode to new default
+      try {
+        const old = JSON.parse(saved);
+        const migrated = { ...defaultSettings, ...old, compactMode: defaultSettings.compactMode };
+        localStorage.setItem("moyu_settings", JSON.stringify(migrated));
+        localStorage.setItem("moyu_settings_ver", String(SETTINGS_VERSION));
+        return migrated;
+      } catch (e) {
+        console.error("Failed to migrate settings", e);
+      }
     }
+    localStorage.setItem("moyu_settings_ver", String(SETTINGS_VERSION));
     return defaultSettings;
   });
 

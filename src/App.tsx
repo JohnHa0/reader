@@ -326,18 +326,21 @@ function MainApp() {
 
   if (isGhost) return null;
 
-  // Jump to TOC entry — use rawContent.length for stable percentage
-  // since charOffsets in tocRaw are from rawContent (not compacted)
+  // Jump to TOC entry by character offset (relative to rawContent)
   const jumpToCharOffset = (charOffset: number) => {
     setTocVisible(false);
+    // Double rAF ensures DOM reflow from TOC closing is complete before scrolling
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const container = scrollRef.current;
         if (!container) return;
-        const refLen = rawContent.length > 0 ? rawContent.length : 1;
-        const pct = charOffset / refLen;
+        // charOffset references rawContent position
+        const refLen = Math.max(rawContent.length, 1);
+        const pct = Math.min(charOffset / refLen, 1);
         const { scrollHeight, clientHeight } = container;
-        container.scrollTop = pct * (scrollHeight - clientHeight);
+        // Clamp to scrollable range
+        const maxScroll = Math.max(0, scrollHeight - clientHeight);
+        container.scrollTop = pct * maxScroll;
       });
     });
   };
@@ -496,7 +499,7 @@ function MainApp() {
             </label>
             <label className="flex items-center gap-2 font-bold cursor-pointer">
               <input type="checkbox" checked={settings.compactMode} onChange={e => updateSettings({ compactMode: e.target.checked })} className="w-4 h-4" />
-              智能去空行
+              智能去空行 <span className="text-xs font-normal text-gray-400">({content.split('\n').length}行)</span>
             </label>
           </div>
 
