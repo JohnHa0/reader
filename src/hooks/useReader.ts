@@ -83,8 +83,12 @@ export function useReader(compactMode: boolean) {
     if (compact) {
       // Remove all spaces/indents at the start and end of every line
       text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
-      // Collapse multiple consecutive newlines (empty lines) into a single newline
-      text = text.replace(/\n{2,}/g, '\n');
+      // Mark actual paragraph breaks (2 or more newlines) with a special placeholder
+      text = text.replace(/\n{2,}/g, '___P_BREAK___');
+      // Remove all remaining single newlines (these are hard-wraps inside a paragraph)
+      text = text.replace(/\n/g, '');
+      // Restore paragraph breaks as a single newline to ensure a compact, flowing text without empty lines
+      text = text.replace(/___P_BREAK___/g, '\n');
     }
     return text;
   };
