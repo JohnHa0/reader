@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { appWindow } from "@tauri-apps/api/window";
 import { invoke } from "@tauri-apps/api/tauri";
 import { useGhostMode } from "./hooks/useGhostMode";
-import { useReader, applyCompact } from "./hooks/useReader";
+import { useReader, applyCompact, applySmartFormat, extractTxtToc } from "./hooks/useReader";
 import { useSettings } from "./hooks/useSettings";
 import "./App.css";
 import { ShortcutInput } from "./components/ShortcutInput";
@@ -101,15 +101,21 @@ function MainApp() {
     tocRaw,
   } = useReader();
 
-  // Compute displayed content here so compactMode changes are 100% immediate
+  // Compute displayed content — reactive to both compactMode and smartFormat
   const content = useMemo(() => {
     if (!rawContent) return placeholder;
-    if (isEpub || !settings.compactMode) return rawContent;
-    return applyCompact(rawContent);
-  }, [rawContent, isEpub, settings.compactMode, placeholder]);
+    if (isEpub) return rawContent;
+    if (settings.smartFormat) return applySmartFormat(rawContent);
+    if (settings.compactMode) return applyCompact(rawContent);
+    return rawContent;
+  }, [rawContent, isEpub, settings.compactMode, settings.smartFormat, placeholder]);
 
-  // Use tocRaw (based on rawContent offsets) for stable TOC entries
-  const toc = tocRaw;
+  // Build TOC from displayed content — charOffsets MUST match content.length for correct jump
+  const toc = useMemo(() => {
+    if (!rawContent || isEpub) return tocRaw; // epub toc from Rust backend
+    if (!filePath) return [];
+    return extractTxtToc(content); // always derived from displayed content
+  }, [content, rawContent, isEpub, filePath, tocRaw]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const [progress, setProgress] = useState(0);
@@ -326,20 +332,16 @@ function MainApp() {
 
   if (isGhost) return null;
 
-  // Jump to TOC entry by character offset (relative to rawContent)
+  // Jump to TOC entry — charOffset and content.length are now from the same text
   const jumpToCharOffset = (charOffset: number) => {
     setTocVisible(false);
-    // Double rAF ensures DOM reflow from TOC closing is complete before scrolling
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const container = scrollRef.current;
         if (!container) return;
-        // charOffset references rawContent position
-        const refLen = Math.max(rawContent.length, 1);
-        const pct = Math.min(charOffset / refLen, 1);
-        const { scrollHeight, clientHeight } = container;
-        // Clamp to scrollable range
-        const maxScroll = Math.max(0, scrollHeight - clientHeight);
+        // pct uses content.length which matches the charOffset from extractTxtToc(content)
+        const pct = Math.min(charOffset / Math.max(content.length, 1), 1);
+        const maxScroll = Math.max(0, container.scrollHeight - container.clientHeight);
         container.scrollTop = pct * maxScroll;
       });
     });
@@ -498,8 +500,16 @@ function MainApp() {
               <input type="range" min="0" max="1" step="0.05" value={settings.bgOpacity} onChange={e => updateSettings({ bgOpacity: Number(e.target.value) })} className="mt-1" />
             </label>
             <label className="flex items-center gap-2 font-bold cursor-pointer">
-              <input type="checkbox" checked={settings.compactMode} onChange={e => updateSettings({ compactMode: e.target.checked })} className="w-4 h-4" />
-              智能去空行 <span className="text-xs font-normal text-gray-400">({content.split('\n').length}行)</span>
+              <input type="checkbox" checked={settings.compactMode} onChange={e => {
+                updateSettings({ compactMode: e.target.checked, smartFormat: false });
+              }} className="w-4 h-4" />
+              去除空行 <span className="text-xs font-normal text-gray-400">({content.split('\n').length}行)</span>
+            </label>
+            <label className="flex items-center gap-2 font-bold cursor-pointer">
+              <input type="checkbox" checked={settings.smartFormat} onChange={e => {
+                updateSettings({ smartFormat: e.target.checked, compactMode: false });
+              }} className="w-4 h-4" />
+              智能排版 <span className="text-xs font-normal text-gray-400">(合并换行)</span>
             </label>
           </div>
 

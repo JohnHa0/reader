@@ -7,9 +7,10 @@ export interface AppSettings {
   bgColor: string;
   bgOpacity: number;
   lineHeight: number;
-  compactMode: boolean;
+  compactMode: boolean;   // remove empty lines only
+  smartFormat: boolean;   // remove ALL newlines — fully flowing text
   autoScroll: boolean;
-  autoScrollSpeed: number; // pixels per frame
+  autoScrollSpeed: number;
   bossKey: string;
   topKey: string;
   throughKey: string;
@@ -33,6 +34,7 @@ const defaultSettings: AppSettings = {
   bgOpacity: 0.8,
   lineHeight: 1.6,
   compactMode: false,
+  smartFormat: false,
   autoScroll: false,
   autoScrollSpeed: 0.5,
   bossKey: "Alt+H",
