@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import { readBinaryFile } from "@tauri-apps/api/fs";
 import { open } from "@tauri-apps/api/dialog";
 import jschardet from "jschardet";
@@ -50,11 +50,23 @@ function extractTxtToc(content: string): TocEntry[] {
   return entries;
 }
 
+/** Apply compact formatting: strip indents and collapse blank lines into flowing text */
+export function applyCompact(rawText: string): string {
+  let text = rawText.replace(/\r\n/g, '\n');
+  // Strip all leading/trailing whitespace (including full-width spaces) from each line
+  text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
+  // Use a placeholder to mark multi-newline (paragraph) breaks
+  text = text.replace(/\n{2,}/g, '\x00');
+  // Remove all single newlines (hard-wraps) — join within paragraphs
+  text = text.replace(/\n/g, '');
+  // Restore paragraph breaks as single newlines
+  text = text.replace(/\x00/g, '\n');
+  return text;
+}
+
 export function useReader(compactMode: boolean) {
   const [rawContent, setRawContent] = useState<string>("");
-  const [content, setContent] = useState<string>(
-    "拖拽 txt/epub 文件到此处开始摸鱼...\n您可以按住任意文字区域拖动窗口。\n\n按 Alt+H 隐藏/显示\n按 Alt+T 置顶/取消置顶\n按 Alt+P 鼠标穿透/取消\n按 Alt+B 添加书签\n按 Alt+C 显示目录"
-  );
+  const [isEpub, setIsEpub] = useState<boolean>(false);
   const [filePath, setFilePath] = useState<string | null>(null);
   const [scrollProgress, setScrollProgress] = useState<number>(0);
   const [recentFiles, setRecentFiles] = useState<RecentFile[]>(() => {
@@ -62,6 +74,15 @@ export function useReader(compactMode: boolean) {
   });
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [toc, setToc] = useState<TocEntry[]>([]);
+
+  // Derive content reactively — any change to compactMode is IMMEDIATELY reflected
+  const content: string = useMemo(() => {
+    if (!rawContent) {
+      return "拖拽 txt/epub 文件到此处开始摸鱼...\n您可以按住任意文字区域拖动窗口。\n\n按 Alt+H 隐藏/显示\n按 Alt+T 置顶/取消置顶\n按 Alt+P 鼠标穿透/取消\n按 Alt+B 添加书签\n按 Alt+C 显示目录";
+    }
+    if (isEpub || !compactMode) return rawContent;
+    return applyCompact(rawContent);
+  }, [rawContent, isEpub, compactMode]);
 
   // Load bookmarks when file changes
   useEffect(() => {
@@ -75,23 +96,16 @@ export function useReader(compactMode: boolean) {
     }
   }, [filePath]);
 
-  const getFileName = (path: string) => path.split(/[\\\/]/).pop() || path;
+  // Update TOC whenever displayed content changes (reacts to compactMode too)
+  useEffect(() => {
+    if (!rawContent || !filePath || isEpub) return;
+    const tocEntries = extractTxtToc(content);
+    setToc(tocEntries);
+  // content is derived — this fires whenever rawContent, compactMode, or filePath changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [content, filePath, isEpub]);
 
-  const cleanText = (rawText: string, compact: boolean, isEpub: boolean) => {
-    if (isEpub) return rawText; // Don't alter EPUB text to preserve Rust TOC offsets
-    let text = rawText.replace(/\r\n/g, '\n');
-    if (compact) {
-      // Remove all spaces/indents at the start and end of every line
-      text = text.replace(/^[ \t\u3000]+|[ \t\u3000]+$/gm, '');
-      // Mark actual paragraph breaks (2 or more newlines) with a special placeholder
-      text = text.replace(/\n{2,}/g, '___P_BREAK___');
-      // Remove all remaining single newlines (these are hard-wraps inside a paragraph)
-      text = text.replace(/\n/g, '');
-      // Restore paragraph breaks as a single newline to ensure a compact, flowing text without empty lines
-      text = text.replace(/___P_BREAK___/g, '\n');
-    }
-    return text;
-  };
+  const getFileName = (path: string) => path.split(/[\\\/]/).pop() || path;
 
   const addToRecent = useCallback((path: string) => {
     const name = getFileName(path);
@@ -125,33 +139,16 @@ export function useReader(compactMode: boolean) {
         extractedText = decoder.decode(fileData);
       }
 
-      const cleaned = cleanText(extractedText, compactMode, epub);
       setRawContent(extractedText);
-      setContent(cleaned);
+      setIsEpub(epub);
       setFilePath(path);
       addToRecent(path);
       localStorage.setItem("last_file_path", path);
-
-      // For txt, extract TOC from cleaned text
-      if (!epub) {
-        const tocEntries = extractTxtToc(cleaned);
-        setToc(tocEntries);
-      }
     } catch (e) {
       console.error("Failed to load file:", e);
-      setContent("文件加载失败：" + String(e));
+      setRawContent("文件加载失败：" + String(e));
     }
-  }, [addToRecent, compactMode]);
-
-  // React to compactMode changes immediately
-  useEffect(() => {
-    if (rawContent && filePath && !filePath.toLowerCase().endsWith(".epub")) {
-      const cleaned = cleanText(rawContent, compactMode, false);
-      setContent(cleaned);
-      const tocEntries = extractTxtToc(cleaned);
-      setToc(tocEntries);
-    }
-  }, [compactMode, rawContent, filePath]);
+  }, [addToRecent]);
 
   const openFileDialog = useCallback(async () => {
     try {

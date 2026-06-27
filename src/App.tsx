@@ -316,29 +316,19 @@ function MainApp() {
 
   if (isGhost) return null;
 
-  // Jump to position by exact character offset
+  // Jump to position by character offset — reliable cross-platform scroll
   const jumpToCharOffset = (charOffset: number) => {
     setTocVisible(false);
-    setTimeout(() => {
-      const container = scrollRef.current;
-      if (!container) return;
-      
-      const textNode = container.firstChild;
-      if (!textNode || textNode.nodeType !== Node.TEXT_NODE) return;
-
-      try {
-        const range = document.createRange();
-        range.setStart(textNode, charOffset);
-        range.setEnd(textNode, charOffset);
-        
-        const rect = range.getBoundingClientRect();
-        const containerRect = container.getBoundingClientRect();
-        
-        container.scrollTop += (rect.top - containerRect.top);
-      } catch (e) {
-        console.error("Failed to jump to char offset", e);
-      }
-    }, 50);
+    // Use double-rAF to ensure DOM has settled after TOC panel closing causes reflow
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+        const pct = content.length > 0 ? charOffset / content.length : 0;
+        const { scrollHeight, clientHeight } = container;
+        container.scrollTop = pct * (scrollHeight - clientHeight);
+      });
+    });
   };
 
   const jumpToBookmark = (pos: number) => {
