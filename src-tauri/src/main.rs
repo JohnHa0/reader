@@ -3,7 +3,7 @@
     windows_subsystem = "windows"
 )]
 
-use tauri::{Manager, GlobalShortcutManager, SystemTray, SystemTrayEvent};
+use tauri::{Manager, GlobalShortcutManager};
 use std::process::Command;
 use serde::{Deserialize, Serialize};
 
@@ -173,26 +173,7 @@ fn register_shortcuts(
 }
 
 fn main() {
-    let tray = SystemTray::new();
-
     tauri::Builder::default()
-        .system_tray(tray)
-        .on_system_tray_event(|app, event| match event {
-            SystemTrayEvent::LeftClick { .. } => {
-                if let Some(window) = app.get_window("main") {
-                    let is_visible = window.is_visible().unwrap_or(true);
-                    if is_visible {
-                        let _ = window.hide();
-                        let _ = app.emit_all("tray-hide", ());
-                    } else {
-                        let _ = window.show();
-                        let _ = window.set_focus();
-                        let _ = app.emit_all("tray-show", ());
-                    }
-                }
-            }
-            _ => {}
-        })
         .invoke_handler(tauri::generate_handler![
             parse_epub,
             parse_epub_toc,

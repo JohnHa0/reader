@@ -64,7 +64,7 @@ function PasswordScreen({ onVerify }: { onVerify: () => void }) {
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (pwd === "18652063629") {
+    if (pwd === "zhbzdd") {
       onVerify();
     } else {
       setPwd(""); // Silently fail and clear
@@ -77,7 +77,7 @@ function PasswordScreen({ onVerify }: { onVerify: () => void }) {
         <h1 className="text-4xl font-bold text-gray-300 mb-1 tracking-wider">404</h1>
         <p className="text-xs text-gray-400 mb-12 font-sans tracking-wide">Not Found</p>
       </div>
-        
+
       <form onSubmit={handleSubmit} className="opacity-0 hover:opacity-30 transition-opacity duration-700">
         <input
           type="password"
@@ -151,7 +151,7 @@ function MainApp() {
 
   // Set window title from settings
   useEffect(() => {
-    appWindow.setTitle(settings.windowTitle).catch(() => {});
+    appWindow.setTitle(settings.windowTitle).catch(() => { });
   }, [settings.windowTitle]);
 
   // Transparent background
@@ -812,7 +812,7 @@ function MainApp() {
 
 export default function App() {
   const [isVerified, setIsVerified] = useState(false);
-  
+
   if (!isVerified) {
     return <PasswordScreen onVerify={() => setIsVerified(true)} />
   }
