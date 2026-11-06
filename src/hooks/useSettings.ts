@@ -17,7 +17,6 @@ export interface AppSettings {
   menuKey: string;
   idleTimeoutMinutes: number;
   menuVisible: boolean;
-  hideTrayInGhost: boolean;
   windowTitle: string;
   bookmarkKey: string;
   tocKey: string;
@@ -43,7 +42,6 @@ const defaultSettings: AppSettings = {
   menuKey: "Alt+M",
   idleTimeoutMinutes: 3,
   menuVisible: true,
-  hideTrayInGhost: false,
   windowTitle: "Microsoft Excel",
   bookmarkKey: "Alt+B",
   tocKey: "Alt+C",

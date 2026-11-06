@@ -248,12 +248,11 @@ function MainApp() {
     }
   }, []);
 
-  const { isGhost, isTop, isThrough } = useGhostMode(
+  const { isGhost, isTop, isThrough, isDisguised, clearDisguise } = useGhostMode(
     settings.bossKey, settings.topKey, settings.throughKey,
     settings.menuKey, settings.bookmarkKey,
     settings.prevPageKey, settings.nextPageKey,
     settings.idleTimeoutMinutes, settings.idleAction,
-    settings.hideTrayInGhost,
     toggleMenu, onBookmark, handlePrevPage, handleNextPage,
   );
 
@@ -341,6 +340,7 @@ function MainApp() {
   }, [settings.menuKey, settings.tocKey, settings.prevPageKey, settings.nextPageKey, settings.bookmarkKey, toggleMenu, toggleToc, handlePrevPage, handleNextPage, onBookmark]);
 
   if (isGhost) return null;
+  if (isDisguised) return <PasswordScreen onVerify={clearDisguise} />;
 
   // Jump to TOC entry using scrollIntoView for txt (line-based), percentage for epub
   const jumpToCharOffset = (lineIndexOrOffset: number) => {
@@ -460,7 +460,7 @@ function MainApp() {
         <div className="absolute top-0 left-0 w-full bg-gray-100 shadow-md z-40 p-4 flex flex-col gap-3 text-sm opacity-95 border-b border-gray-300 max-h-[90vh] overflow-y-auto">
           {/* Header */}
           <div data-tauri-drag-region className="flex justify-between items-center cursor-move">
-            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v1.1.0</h2>
+            <h2 className="font-bold text-gray-700 pointer-events-none">Moyu Reader v{__APP_VERSION__}</h2>
             <button onClick={() => updateSettings({ menuVisible: false })} className="text-gray-500 hover:text-black cursor-pointer text-lg leading-none px-1">✕</button>
           </div>
 
@@ -592,12 +592,6 @@ function MainApp() {
                 <option value="disguise">切换到伪装界面</option>
               </select>
             </label>
-            <div className="flex flex-col gap-1 text-xs text-gray-600">
-              <label className="flex items-center gap-1 cursor-pointer">
-                <input type="checkbox" checked={settings.hideTrayInGhost} onChange={e => updateSettings({ hideTrayInGhost: e.target.checked })} className="w-4 h-4" />
-                隐身时隐藏托盘
-              </label>
-            </div>
           </div>
 
           <div className="h-px w-full bg-gray-300" />

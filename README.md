@@ -1,15 +1,14 @@
 # Moyu Reader (摸鱼阅读器) - 配置与维护手册
 
-Moyu Reader 是一款专为 Linux（如麒麟 OS、Ubuntu）等环境设计的高级隐蔽型跨平台本地小说阅读器。本项目基于 Tauri v2 + React + TypeScript + Rust 构建，主打**无边框、可高度定制、系统级按键防屏蔽**等特性，助您在办公环境下实现完美“潜伏”。
+Moyu Reader 是一款专为 Linux（如麒麟 OS、Ubuntu）等环境设计的隐蔽型跨平台本地小说阅读器。本项目基于 Tauri v1 + React + TypeScript + Rust 构建，支持无边框、透明度定制和全局快捷键。
 
 ---
 
 ## 🌟 核心特性与架构解读
 
-### 1. 突破桌面限制的“真·全局快捷键” (rdev底层Hook)
-在 Linux (特别是 Wayland 或某些定制过的 X11 桌面环境) 中，常规的全局快捷键经常被系统或窗口管理器拦截。
-* **技术实现**：抛弃了传统的 `tauri-plugin-global-shortcut` 插件，在 Rust 后端 (`src-tauri/src/lib.rs`) 中集成了内核级的按键监听库 `rdev`。
-* **效果**：无论焦点在哪个窗口，甚至在全屏游戏中，只要按下设定的按键组合（如 `F9`, `Alt+H` 等），后台 Rust 线程都会捕获，并通过 Tauri IPC 发送给前端执行“隐身”、“置顶”、“穿透”等指令，实现100%触发率。
+### 1. 全局快捷键
+* **技术实现**：使用 Tauri v1 的全局快捷键管理器，由 Rust 后端统一注册，并通过事件通知前端执行置顶、穿透和翻页等操作。老板键的窗口隐藏与恢复直接在 Rust 层完成，避免 Linux 下 WebView 隐藏后暂停导致无法唤回。
+* **桌面环境**：X11 下可在其他窗口获得焦点时触发。Wayland 是否允许全局快捷键取决于桌面环境及其安全策略；应用有焦点时仍可使用本地快捷键。
 
 ### 2. 隐形边缘拖拽系统
 由于软件采用完全无边框 (`decorations: false`) 和全透明 (`transparent: true`) 渲染，传统的拖拽往往会与页面内容的鼠标滚动、文字选中发生冲突。
@@ -34,9 +33,9 @@ Moyu Reader 是一款专为 Linux（如麒麟 OS、Ubuntu）等环境设计的�
 3. **系统依赖**: 
    ```bash
    sudo apt update
-   sudo apt install libwebkit2gtk-4.1-dev build-essential curl wget file libssl-dev libgtk-3-dev libayatana-appindicator3-dev librsvg2-dev
+   sudo apt install libwebkit2gtk-4.0-dev build-essential curl wget file libssl-dev libgtk-3-dev librsvg2-dev
    ```
-   *(注意：某些 Linux 发行版下的 `rdev` 可能需要额外的 udev 规则或权限设置，若快捷键无响应，请尝试放宽 `/dev/input/` 的读取权限或切换 X11/Wayland 尝试。)*
+   Linux 发布包分别在 amd64 与 arm64 的 Ubuntu 20.04（glibc 2.31）环境中构建，可用于对应架构的麒麟 glibc 2.31 系统。
 
 ### 启动与编译指令
 * **安装依赖**：
@@ -84,7 +83,7 @@ Moyu Reader 是一款专为 Linux（如麒麟 OS、Ubuntu）等环境设计的�
 ### 2. 快捷键失效
 **排查步骤**：
 1. 请检查您的输入法是否处于全角模式。
-2. 在 Linux Wayland 环境下，若安全策略过严，`rdev` 有时会受限。如果遇到这种情况，请在终端以更高的权限测试，或切换至 X11 运行环境。
+2. Linux Wayland 通常不允许应用任意注册系统级快捷键。若需要在其他软件获得焦点时使用老板键，请登录 X11 会话；不要通过 root 权限运行桌面应用。
 
 ### 3. 拖拽无法生效
 **提示**：软件中心区域已被释放为阅读区域。若需拖拽，请精准将鼠标移动至窗口的最顶端或最底端边缘（约 3-5px 的判定区），或者通过 `Alt+M` 呼出菜单后按住菜单栏顶部拖拽。
@@ -98,3 +97,5 @@ git tag v0.1.0 && git push origin v0.1.0
 
 git push origin v0.1.0 -f
 git tag v0.1.0 -f && git push origin v0.1.0 -f
+
+git tag v1.1.1 && git push origin v1.1.1

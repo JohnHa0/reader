@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { appWindow } from "@tauri-apps/api/window";
 import { listen } from "@tauri-apps/api/event";
 import { invoke } from "@tauri-apps/api/tauri";
@@ -13,7 +13,6 @@ export function useGhostMode(
   nextPageKey: string,
   idleTimeoutMinutes: number,
   idleAction: 'hide' | 'disguise',
-  hideTrayInGhost: boolean,
   onMenuToggle: () => void,
   onBookmark: () => void,
   onPrevPage: () => void,
@@ -22,26 +21,7 @@ export function useGhostMode(
   const [isGhost, setIsGhost] = useState(false);
   const [isTop, setIsTop] = useState(false);
   const [isThrough, setIsThrough] = useState(false);
-  const isGhostRef = useRef(false);
-  const hideTrayRef = useRef(hideTrayInGhost);
-
-  useEffect(() => { isGhostRef.current = isGhost; }, [isGhost]);
-  useEffect(() => { hideTrayRef.current = hideTrayInGhost; }, [hideTrayInGhost]);
-
-  // In Tauri v1, we configured a static system tray. We just listen to its events.
-  useEffect(() => {
-    const unlistenHide = listen('tray-hide', () => {
-      setIsGhost(true);
-    });
-    const unlistenShow = listen('tray-show', () => {
-      setIsGhost(false);
-    });
-    return () => {
-      unlistenHide.then(f => f());
-      unlistenShow.then(f => f());
-    };
-  }, []);
-
+  const [isDisguised, setIsDisguised] = useState(false);
   const toggleGhost = useCallback(async () => {
     try {
       if (isGhost) {
@@ -55,7 +35,7 @@ export function useGhostMode(
     } catch (e) {
       console.error("Failed to toggle ghost mode:", e);
     }
-  }, [isGhost, hideTrayInGhost]);
+  }, [isGhost]);
 
   const toggleTop = useCallback(async () => {
     try {
@@ -85,8 +65,8 @@ export function useGhostMode(
       throughKey: throughKey || "",
       menuKey: menuKey || "",
       bookmarkKey: bookmarkKey || "",
-      prev_page_key: prevPageKey || "",
-      next_page_key: nextPageKey || "",
+      prevPageKey: prevPageKey || "",
+      nextPageKey: nextPageKey || "",
     }).catch((e) => console.error("Failed to register shortcuts:", e));
   }, [bossKey, topKey, throughKey, menuKey, bookmarkKey, prevPageKey, nextPageKey]);
 
@@ -94,9 +74,8 @@ export function useGhostMode(
   useEffect(() => {
     const unlisten = listen<string>('global-keypress', (event) => {
       const name = event.payload;
-      if (name === "boss") {
-        // Window is visible — JS handles hiding
-        toggleGhost();
+      if (name === "boss-hide") {
+        setIsGhost(true);
       } else if (name === "boss-show") {
         setIsGhost(false);
       } else if (name === "top") {
@@ -117,7 +96,7 @@ export function useGhostMode(
       }
     });
     return () => { unlisten.then(fn => fn()); };
-  }, [toggleGhost, toggleTop, toggleThrough, onMenuToggle, onBookmark, onPrevPage, onNextPage]);
+  }, [toggleTop, toggleThrough, onMenuToggle, onBookmark, onPrevPage, onNextPage]);
 
   // Idle timeout — supports 'hide' (default) or 'disguise' action
   useEffect(() => {
@@ -126,8 +105,11 @@ export function useGhostMode(
       clearTimeout(timeout);
       if (!isGhost && idleTimeoutMinutes > 0) {
         timeout = window.setTimeout(() => {
-          // idleAction: 'hide' = silently hide; 'disguise' = caller handles via isIdle state
-          toggleGhost();
+          if (idleAction === 'disguise') {
+            setIsDisguised(true);
+          } else {
+            toggleGhost();
+          }
         }, idleTimeoutMinutes * 60 * 1000);
       }
     };
@@ -143,5 +125,14 @@ export function useGhostMode(
     };
   }, [isGhost, toggleGhost, idleTimeoutMinutes, idleAction]);
 
-  return { isGhost, isTop, isThrough, toggleGhost, toggleTop, toggleThrough };
+  return {
+    isGhost,
+    isTop,
+    isThrough,
+    isDisguised,
+    clearDisguise: () => setIsDisguised(false),
+    toggleGhost,
+    toggleTop,
+    toggleThrough,
+  };
 }
