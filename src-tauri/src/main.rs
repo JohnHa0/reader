@@ -146,9 +146,11 @@ fn register_shortcuts(
     bookmark_key: String,
     prev_page_key: String,
     next_page_key: String,
-) -> Result<(), String> {
+) -> Result<(bool, Vec<String>), String> {
     let mut manager = app.global_shortcut_manager();
-    let _ = manager.unregister_all();
+    manager
+        .unregister_all()
+        .map_err(|error| error.to_string())?;
 
     let shortcuts = vec![
         (boss_key, "boss"),
@@ -161,6 +163,7 @@ fn register_shortcuts(
     ];
 
     let mut registration_errors = Vec::new();
+    let mut menu_registered = false;
 
     for (key, name) in shortcuts {
         if key.is_empty() {
@@ -199,17 +202,12 @@ fn register_shortcuts(
             }
         }) {
             registration_errors.push(format!("{}: {}", key, error));
+        } else if name == "menu" {
+            menu_registered = true;
         }
     }
 
-    if !registration_errors.is_empty() {
-        return Err(format!(
-            "以下全局快捷键注册失败：{}",
-            registration_errors.join("; ")
-        ));
-    }
-
-    Ok(())
+    Ok((menu_registered, registration_errors))
 }
 
 fn main() {

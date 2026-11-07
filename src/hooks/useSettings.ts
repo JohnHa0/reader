@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useState } from "react";
 
 export interface AppSettings {
   fontSize: number;
@@ -78,13 +78,13 @@ export function useSettings() {
     return defaultSettings;
   });
 
-  const updateSettings = (newSettings: Partial<AppSettings>) => {
+  const updateSettings = useCallback((newSettings: Partial<AppSettings> | ((prev: AppSettings) => Partial<AppSettings>)) => {
     setSettingsState((prev) => {
-      const updated = { ...prev, ...newSettings };
+      const updated = { ...prev, ...(typeof newSettings === "function" ? newSettings(prev) : newSettings) };
       localStorage.setItem("moyu_settings", JSON.stringify(updated));
       return updated;
     });
-  };
+  }, []);
 
   return { settings, updateSettings };
 }

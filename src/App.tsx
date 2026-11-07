@@ -211,9 +211,9 @@ function MainApp() {
     return () => el.removeEventListener("wheel", onWheel);
   }, [settings.fontSize, updateSettings, showToast]);
 
-  const toggleMenu = useCallback(() => {
-    updateSettings({ menuVisible: !settings.menuVisible });
-  }, [settings.menuVisible, updateSettings]);
+  const toggleMenu = useCallback((forceOpen = false) => {
+    updateSettings(prev => ({ menuVisible: forceOpen || !prev.menuVisible }));
+  }, [updateSettings]);
 
   const toggleToc = useCallback(() => {
     setTocVisible(v => !v);
@@ -248,7 +248,7 @@ function MainApp() {
     }
   }, []);
 
-  const { isGhost, isTop, isThrough, isDisguised, clearDisguise } = useGhostMode(
+  const { isGhost, isTop, isThrough, isDisguised, clearDisguise, menuRegistered, handleMenuShortcut } = useGhostMode(
     settings.bossKey, settings.topKey, settings.throughKey,
     settings.menuKey, settings.bookmarkKey,
     settings.prevPageKey, settings.nextPageKey,
@@ -259,6 +259,24 @@ function MainApp() {
   // Local menu key fallback (when window has focus / Wayland)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.isComposing) return;
+
+      const parts = settings.menuKey.toLowerCase().split("+");
+      const key = parts.pop() ?? "";
+      const commandOrControl = parts.includes("commandorcontrol");
+      const mac = /Mac/.test(navigator.platform);
+      const matchesMenu = key !== "" && matchesKey(e, key) &&
+        e.altKey === parts.includes("alt") &&
+        e.shiftKey === parts.includes("shift") &&
+        e.ctrlKey === (parts.includes("ctrl") || parts.includes("control") || (commandOrControl && !mac)) &&
+        e.metaKey === (parts.includes("super") || parts.includes("meta") || (commandOrControl && mac));
+      const localMenu = e.key === "F10" && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey;
+      if ((matchesMenu && !menuRegistered) || (localMenu && !(matchesMenu && menuRegistered))) {
+        e.preventDefault();
+        if (!e.repeat) void handleMenuShortcut();
+        return;
+      }
+
       // TOC toggle shortcut (local only)
       const tocParts = settings.tocKey.split("+");
       const tocKeyStr = tocParts[tocParts.length - 1] ?? "";
@@ -271,23 +289,6 @@ function MainApp() {
       ) {
         e.preventDefault();
         toggleToc();
-        return;
-      }
-
-      // Menu toggle fallback
-      const parts = settings.menuKey.split("+");
-      const keyStr = parts[parts.length - 1] ?? "";
-      const needsAlt = parts.includes("Alt");
-      const needsCtrl = parts.includes("CommandOrControl");
-      const needsShift = parts.includes("Shift");
-      if (
-        (needsAlt ? e.altKey : !e.altKey) &&
-        (needsCtrl ? (e.ctrlKey || e.metaKey) : (!e.ctrlKey && !e.metaKey)) &&
-        (needsShift ? e.shiftKey : !e.shiftKey) &&
-        matchesKey(e, keyStr)
-      ) {
-        e.preventDefault();
-        toggleMenu();
         return;
       }
 
@@ -337,7 +338,7 @@ function MainApp() {
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [settings.menuKey, settings.tocKey, settings.prevPageKey, settings.nextPageKey, settings.bookmarkKey, toggleMenu, toggleToc, handlePrevPage, handleNextPage, onBookmark]);
+  }, [settings.menuKey, settings.tocKey, settings.prevPageKey, settings.nextPageKey, settings.bookmarkKey, menuRegistered, handleMenuShortcut, toggleToc, handlePrevPage, handleNextPage, onBookmark]);
 
   if (isGhost) return null;
   if (isDisguised) return <PasswordScreen onVerify={clearDisguise} />;

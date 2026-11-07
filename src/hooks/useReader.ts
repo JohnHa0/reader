@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { readBinaryFile } from "@tauri-apps/api/fs";
+import { TauriEvent } from "@tauri-apps/api/event";
+import { appWindow } from "@tauri-apps/api/window";
 import { open } from "@tauri-apps/api/dialog";
 import jschardet from "jschardet";
 import { invoke } from "@tauri-apps/api/tauri";
@@ -142,6 +144,21 @@ export function useReader() {
       setRawContent("文件加载失败：" + String(e));
     }
   }, [addToRecent]);
+
+  useEffect(() => {
+    let active = true;
+    const unlisten = appWindow.listen<string[]>(TauriEvent.WINDOW_FILE_DROP, ({ payload }) => {
+      const path = payload.find(path => /\.(txt|epub)$/i.test(path));
+      if (active && path) void loadFile(path);
+    });
+    const cleanup = unlisten.catch(error => {
+      console.error("Failed to listen for book drops:", error);
+    });
+    return () => {
+      active = false;
+      void cleanup.then(stop => stop?.());
+    };
+  }, [loadFile]);
 
   const openFileDialog = useCallback(async () => {
     try {

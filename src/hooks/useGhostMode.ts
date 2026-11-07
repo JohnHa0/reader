@@ -13,7 +13,7 @@ export function useGhostMode(
   nextPageKey: string,
   idleTimeoutMinutes: number,
   idleAction: 'hide' | 'disguise',
-  onMenuToggle: () => void,
+  onMenuToggle: (forceOpen?: boolean) => void,
   onBookmark: () => void,
   onPrevPage: () => void,
   onNextPage: () => void,
@@ -22,6 +22,7 @@ export function useGhostMode(
   const [isTop, setIsTop] = useState(false);
   const [isThrough, setIsThrough] = useState(false);
   const [isDisguised, setIsDisguised] = useState(false);
+  const [registeredMenuKey, setRegisteredMenuKey] = useState<string | null>(null);
   const toggleGhost = useCallback(async () => {
     try {
       if (isGhost) {
@@ -57,9 +58,18 @@ export function useGhostMode(
     }
   }, [isThrough]);
 
+  const handleMenuShortcut = useCallback(async (forceOpen = false) => {
+    if (isThrough) {
+      await toggleThrough();
+    }
+    onMenuToggle(forceOpen || isThrough);
+  }, [isThrough, onMenuToggle, toggleThrough]);
+
   // Register global shortcuts via Rust backend
   useEffect(() => {
-    invoke("register_shortcuts", {
+    let active = true;
+    setRegisteredMenuKey(null);
+    invoke<[boolean, string[]]>("register_shortcuts", {
       bossKey: bossKey || "",
       topKey: topKey || "",
       throughKey: throughKey || "",
@@ -67,7 +77,11 @@ export function useGhostMode(
       bookmarkKey: bookmarkKey || "",
       prevPageKey: prevPageKey || "",
       nextPageKey: nextPageKey || "",
+    }).then(([menuRegistered, errors]) => {
+      if (active && menuRegistered) setRegisteredMenuKey(menuKey);
+      if (errors.length) console.error("Failed to register shortcuts:", errors);
     }).catch((e) => console.error("Failed to register shortcuts:", e));
+    return () => { active = false; };
   }, [bossKey, topKey, throughKey, menuKey, bookmarkKey, prevPageKey, nextPageKey]);
 
   // Listen to shortcut events from Rust backend
@@ -83,10 +97,10 @@ export function useGhostMode(
       } else if (name === "through") {
         toggleThrough();
       } else if (name === "menu") {
-        onMenuToggle();
+        void handleMenuShortcut();
       } else if (name === "menu-show") {
         setIsGhost(false);
-        onMenuToggle();
+        void handleMenuShortcut(true);
       } else if (name === "bookmark") {
         onBookmark();
       } else if (name === "prev_page") {
@@ -96,7 +110,7 @@ export function useGhostMode(
       }
     });
     return () => { unlisten.then(fn => fn()); };
-  }, [toggleTop, toggleThrough, onMenuToggle, onBookmark, onPrevPage, onNextPage]);
+  }, [toggleTop, toggleThrough, handleMenuShortcut, onBookmark, onPrevPage, onNextPage]);
 
   // Idle timeout — supports 'hide' (default) or 'disguise' action
   useEffect(() => {
@@ -130,6 +144,8 @@ export function useGhostMode(
     isTop,
     isThrough,
     isDisguised,
+    menuRegistered: registeredMenuKey === menuKey,
+    handleMenuShortcut,
     clearDisguise: () => setIsDisguised(false),
     toggleGhost,
     toggleTop,
